@@ -1,0 +1,173 @@
+name: Dispatch configured Railway server deployment
+
+# This workflow never contacts Railway directly.  It dispatches a release
+# payload to an operator-configured server repository, whose own workflow must
+# own Railway credentials and migration execution.
+on:
+  workflow_dispatch:
+    inputs:
+      manifest_path:
+        description: "Validated release manifest path in this checkout"
+        required: true
+        type: string
+      manifest_url:
+        description: "HTTPS URL where the published manifest can be fetched"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Check opt-in and deployment configuration
+    runs-on: ubuntu-latest
+    outputs:
+      should_dispatch: ${{ steps.decision.outputs.should_dispatch }}
+    env:
+      SOMETHINGBOUND_RAILWAY_DEPLOY: ${{ vars.SOMETHINGBOUND_RAILWAY_DEPLOY }}
+      RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+      RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      SOMETHINGBOUND_SERVER_REPOSITORY: ${{ vars.SOMETHINGBOUND_SERVER_REPOSITORY }}
+      SOMETHINGBOUND_SERVER_DEPLOY_EVENT: ${{ vars.SOMETHINGBOUND_SERVER_DEPLOY_EVENT }}
+      SOMETHINGBOUND_SERVER_REPOSITORY_TOKEN: ${{ secrets.SOMETHINGBOUND_SERVER_REPOSITORY_TOKEN }}
+    steps:
+      - name: Check out release repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Decide whether dispatch is allowed
+        id: decision
+        run: |
+          set -euo pipefail
+          # This command reports only configuration names and a sanitized
+          # action; it never prints any environment value.
+          python3 -m release_tools.deployment
+          action="$(python3 - <<'PY'
+          from release_tools.deployment import plan_railway_deployment
+          print(plan_railway_deployment().action)
+          PY
+          )"
+          if [[ "$action" != "ready" ]]; then
+            echo "should_dispatch=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          missing=()
+          for name in \
+            SOMETHINGBOUND_SERVER_REPOSITORY \
+            SOMETHINGBOUND_SERVER_DEPLOY_EVENT \
+            SOMETHINGBOUND_SERVER_REPOSITORY_TOKEN; do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} )); then
+            echo "Server deployment dispatch skipped; missing configuration: ${missing[*]}"
+            echo "should_dispatch=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ ! "$SOMETHINGBOUND_SERVER_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+            echo "Server deployment dispatch skipped; repository configuration is malformed"
+            echo "should_dispatch=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ ! "$SOMETHINGBOUND_SERVER_DEPLOY_EVENT" =~ ^[A-Za-z0-9_.-]{1,100}$ ]]; then
+            echo "Server deployment dispatch skipped; event configuration is malformed"
+            echo "should_dispatch=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "should_dispatch=true" >> "$GITHUB_OUTPUT"
+
+  dispatch:
+    name: Dispatch release to configured server repository
+    needs: preflight
+    if: needs.preflight.outputs.should_dispatch == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.SOMETHINGBOUND_SERVER_REPOSITORY_TOKEN }}
+      SOMETHINGBOUND_SERVER_REPOSITORY: ${{ vars.SOMETHINGBOUND_SERVER_REPOSITORY }}
+      SOMETHINGBOUND_SERVER_DEPLOY_EVENT: ${{ vars.SOMETHINGBOUND_SERVER_DEPLOY_EVENT }}
+      RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+      RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
+      MANIFEST_PATH: ${{ inputs.manifest_path }}
+      MANIFEST_URL: ${{ inputs.manifest_url }}
+    steps:
+      - name: Check out release repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Validate manifest and manifest URL
+        run: |
+          set -euo pipefail
+          python3 -m release_tools.validate_manifest "$MANIFEST_PATH"
+          python3 - "$MANIFEST_URL" <<'PY'
+          import sys
+          from urllib.parse import urlsplit
+
+          value = sys.argv[1]
+          parsed = urlsplit(value)
+          if (
+              not value
+              or any(character.isspace() for character in value)
+              or parsed.scheme != "https"
+              or not parsed.netloc
+              or parsed.hostname is None
+              or parsed.username is not None
+              or parsed.password is not None
+          ):
+              raise SystemExit("manifest_url must be an HTTPS URL without credentials")
+          PY
+
+      - name: Dispatch the configured server deployment event
+        run: |
+          set -euo pipefail
+          # The Railway token is intentionally not sent in this payload.  The
+          # receiving server workflow must read its own Railway secret and own
+          # the actual deployment and migration hook.
+          python3 - "$MANIFEST_PATH" "$MANIFEST_URL" \
+            "$SOMETHINGBOUND_SERVER_DEPLOY_EVENT" \
+            "$RAILWAY_PROJECT_ID" "$RAILWAY_SERVICE_ID" <<'PY' \
+            | gh api --method POST \
+                "repos/$SOMETHINGBOUND_SERVER_REPOSITORY/dispatches" \
+                --input - >/dev/null
+          import json
+          import sys
+          from pathlib import Path
+
+          manifest_path, manifest_url, event_type, project_id, service_id = sys.argv[1:]
+          manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+          payload = {
+              "event_type": event_type,
+              "client_payload": {
+                  "contract": "somethingbound-release/v1",
+                  "manifestUrl": manifest_url,
+                  "release": {
+                      "version": manifest["release"]["version"],
+                      "gitSha": manifest["release"]["gitSha"],
+                  },
+                  "serverArtifact": manifest["artifacts"]["server"],
+                  "railway": {
+                      "projectId": project_id,
+                      "serviceId": service_id,
+                  },
+              },
+          }
+          json.dump(payload, sys.stdout)
+          PY
+          echo "Dispatched the release contract; no Railway deployment result is claimed."
