@@ -1,0 +1,11 @@
+# Generated Python bytecode and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local tooling and environment files
+.venv/
+venv/
+.env
+.env.*
+!.env.example
