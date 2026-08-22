@@ -1,0 +1,52 @@
+{
+  "manifestSchemaVersion": 1,
+  "release": {
+    "version": "1.4.0",
+    "gitSha": "0123456789abcdef0123456789abcdef01234567",
+    "buildTimestamp": "2025-01-02T03:04:05Z",
+    "releaseNotes": {
+      "range": {
+        "from": "1.3.0",
+        "to": "1.4.0"
+      },
+      "text": "Compatibility and content updates.",
+      "url": "https://releases.example.invalid/somethingbound/1.4.0"
+    },
+    "previousRelease": {
+      "version": "1.3.0",
+      "manifestUrl": "https://releases.example.invalid/somethingbound/1.3.0/manifest.json"
+    },
+    "rollbackTarget": {
+      "version": "1.2.0",
+      "manifestUrl": "https://releases.example.invalid/somethingbound/1.2.0/manifest.json"
+    }
+  },
+  "versions": {
+    "client": "1.4.0",
+    "server": "1.4.0",
+    "protocol": "2.1.0",
+    "content": "3.0.0",
+    "ruleset": "2.2.0",
+    "schema": "1.1.0"
+  },
+  "minimumCompatibleVersions": {
+    "client": "1.2.0",
+    "server": "1.3.0",
+    "protocol": "2.0.0",
+    "content": "2.5.0",
+    "ruleset": "2.0.0",
+    "schema": "1.0.0"
+  },
+  "artifacts": {
+    "client": {
+      "url": "https://downloads.example.invalid/somethingbound/1.4.0/client.txt",
+      "sha256": "844b4ce8cca14c57e8eb3f3743f9d372d12393567a3be7b6f17ebe70d29ec9f8",
+      "sizeBytes": 15
+    },
+    "server": {
+      "url": "https://downloads.example.invalid/somethingbound/1.4.0/server.txt",
+      "sha256": "3f559e7aa25b533cfc51d1a4146c6bdc1604eedc6c6a7041b6a1359fcd2a6a0f",
+      "sizeBytes": 15
+    }
+  }
+}

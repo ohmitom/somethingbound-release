@@ -1,0 +1,105 @@
+name: Publish release metadata and artifacts
+
+# Publishing is deliberately manual.  An operator supplies already-built
+# artifacts and an existing tag; this repository does not build client/server
+# binaries or invent their source repository.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing Git tag to publish (must be v<manifest release version>)"
+        required: true
+        type: string
+      manifest_path:
+        description: "Validated release manifest path in this checkout"
+        required: true
+        type: string
+      client_artifact_path:
+        description: "Built client artifact path in this checkout"
+        required: true
+        type: string
+      server_artifact_path:
+        description: "Built server artifact path in this checkout"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Validate and publish release assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Validate manifest, artifacts, and tag identity
+        id: metadata
+        env:
+          MANIFEST_PATH: ${{ inputs.manifest_path }}
+          CLIENT_ARTIFACT_PATH: ${{ inputs.client_artifact_path }}
+          SERVER_ARTIFACT_PATH: ${{ inputs.server_artifact_path }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          NOTES_FILE: ${{ runner.temp }}/somethingbound-release-notes.md
+        run: |
+          set -euo pipefail
+          python3 -m release_tools.validate_manifest "$MANIFEST_PATH" \
+            --artifact "client=$CLIENT_ARTIFACT_PATH" \
+            --artifact "server=$SERVER_ARTIFACT_PATH"
+          python3 - "$MANIFEST_PATH" "$RELEASE_TAG" "$NOTES_FILE" <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          manifest_path, tag, notes_path = sys.argv[1:]
+          manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+          version = manifest["release"]["version"]
+          expected_tag = f"v{version}"
+          if tag != expected_tag:
+              raise SystemExit(
+                  f"tag must be {expected_tag!r} for manifest release {version!r}"
+              )
+
+          release_notes = manifest["release"]["releaseNotes"]
+          note_range = release_notes["range"]
+          start = note_range["from"] or "initial release"
+          notes = (
+              f"Changes from {start} through {note_range['to']}.\n\n"
+              f"{release_notes['text'].strip()}\n"
+          )
+          Path(notes_path).write_text(notes, encoding="utf-8")
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+              output.write(f"version={version}\n")
+          print(f"validated release {version}")
+          PY
+
+      - name: Publish manifest and artifacts as a GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          MANIFEST_PATH: ${{ inputs.manifest_path }}
+          CLIENT_ARTIFACT_PATH: ${{ inputs.client_artifact_path }}
+          SERVER_ARTIFACT_PATH: ${{ inputs.server_artifact_path }}
+          NOTES_FILE: ${{ runner.temp }}/somethingbound-release-notes.md
+          VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "SomethingBound $VERSION" \
+            --notes-file "$NOTES_FILE" \
+            "$MANIFEST_PATH#release-manifest.json" \
+            "$CLIENT_ARTIFACT_PATH#client-artifact" \
+            "$SERVER_ARTIFACT_PATH#server-artifact"

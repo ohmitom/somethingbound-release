@@ -1,0 +1,47 @@
+name: Validate release contracts
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/**"
+      - "fixtures/**"
+      - "release_tools/**"
+      - "schema/**"
+      - "tests/**"
+  pull_request: {}
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate manifests and compatibility contracts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Validate checked-in manifests and fixture artifacts
+        run: |
+          set -euo pipefail
+          python3 -m release_tools.validate_manifest \
+            fixtures/manifest.valid.json \
+            --artifact client=fixtures/artifacts/client.txt \
+            --artifact server=fixtures/artifacts/server.txt
+          python3 -m release_tools.validate_manifest \
+            fixtures/manifest.update.json \
+            --artifact client=fixtures/artifacts/client.txt \
+            --artifact server=fixtures/artifacts/server.txt
+
+      - name: Run deterministic contract tests
+        run: python3 -m unittest discover --start-directory tests --verbose
