@@ -200,7 +200,14 @@ def _check_artifact(value: Any, path: str, errors: list[str]) -> None:
         _error(errors, f"{path}.sizeBytes", "must be a non-negative integer")
 
 
-def _compare_versions(left: str, right: str) -> int:
+def compare_versions(left: str, right: str) -> int:
+    """Compare two already validated SemVer values.
+
+    The validator calls this only after checking both values.  Keeping the
+    comparison here gives launcher and deployment checks one deterministic
+    SemVer ordering implementation to share.
+    """
+
     left_key = _semver_key(left)
     right_key = _semver_key(right)
     if left_key is None or right_key is None:  # pragma: no cover - guarded callers
@@ -368,7 +375,7 @@ def validate_manifest(manifest: Any) -> list[str]:
         for key in VERSION_KEYS:
             current = current_versions.get(key)
             minimum = minimum_versions.get(key)
-            if current is not None and minimum is not None and _compare_versions(minimum, current) > 0:
+            if current is not None and minimum is not None and compare_versions(minimum, current) > 0:
                 _error(
                     errors,
                     f"minimumCompatibleVersions.{key}",
@@ -388,14 +395,14 @@ def validate_manifest(manifest: Any) -> list[str]:
                 _check_artifact(artifacts[kind], f"artifacts.{kind}", errors)
 
     if release_version is not None and previous_version is not None:
-        if _compare_versions(previous_version, release_version) >= 0:
+        if compare_versions(previous_version, release_version) >= 0:
             _error(
                 errors,
                 "release.previousRelease.version",
                 "must be older than release.version",
             )
     if release_version is not None and rollback_version is not None:
-        if _compare_versions(rollback_version, release_version) >= 0:
+        if compare_versions(rollback_version, release_version) >= 0:
             _error(
                 errors,
                 "release.rollbackTarget.version",

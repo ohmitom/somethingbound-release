@@ -2,6 +2,7 @@
 
 from .manifest import (
     ManifestValidationError,
+    compare_versions,
     load_manifest,
     validate_manifest,
     verify_artifact,
@@ -9,6 +10,7 @@ from .manifest import (
 
 __all__ = [
     "ManifestValidationError",
+    "compare_versions",
     "load_manifest",
     "validate_manifest",
     "verify_artifact",
