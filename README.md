@@ -76,5 +76,8 @@ process hand-off are intentionally later work.
 
 The repository also retains the earlier coordinated release/server compatibility
 fixtures and checks in `release_tools/compatibility.py`, `release_tools/server.py`,
-and the legacy fixture manifests. They remain covered by the full test command;
-the launcher foundation uses the separate channel contract above.
+the `dispatch-railway.yml`/`publish-release.yml` workflows, and the legacy fixture
+manifests. That coordinated path is superseded by the channel-manifest contract
+above and is kept only pending the full release-loop task; it is not documented
+further here, and no compatibility layer or second schema should be added on top
+of it. It remains covered by the full test command.
