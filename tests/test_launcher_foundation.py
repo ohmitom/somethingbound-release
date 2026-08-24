@@ -4,10 +4,11 @@ import copy
 import json
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from release_tools.channel_manifest import (
     ChannelManifestValidationError,
+    artifact_url_path,
     load_channel_manifest,
     validate_channel_manifest,
 )
@@ -56,6 +57,23 @@ class LauncherFoundationTests(unittest.TestCase):
         with self.assertRaises(ChannelManifestValidationError) as context:
             load_channel_manifest(MANIFEST_PATH, installed_version="2.0.0")
         self.assertIn("must not regress below installed version 2.0.0", str(context.exception))
+
+    def test_windows_drive_artifact_paths_validate_and_resolve(self) -> None:
+        for url in (r"C:\Users\foo\launcher.exe", "C:/Users/foo/launcher.exe"):
+            manifest = copy.deepcopy(self.manifest)
+            manifest["artifacts"][0]["url"] = url
+            self.assertEqual(validate_channel_manifest(manifest), [])
+            resolved = PureWindowsPath(str(artifact_url_path(url)))
+            self.assertTrue(resolved.is_absolute())
+            self.assertEqual(resolved.drive, "C:")
+
+        file_url = "file:///C:/Users/foo/launcher.exe"
+        manifest = copy.deepcopy(self.manifest)
+        manifest["artifacts"][0]["url"] = file_url
+        self.assertEqual(validate_channel_manifest(manifest), [])
+        resolved = PureWindowsPath(str(artifact_url_path(file_url)))
+        self.assertTrue(resolved.is_absolute())
+        self.assertEqual(resolved.drive, "C:")
 
     def test_version_comparison_uses_version_and_git_identity(self) -> None:
         self.assertTrue(
@@ -121,6 +139,23 @@ class LauncherFoundationTests(unittest.TestCase):
             old = InstalledBuild("1.0.0", "0" * 40, "old-launcher.txt")
             engine.seed_installed(old)
             engine.active_path.write_bytes(b"old build")
+            with self.assertRaises(AtomicInstallError):
+                engine.update(
+                    self.manifest,
+                    installed=old,
+                    base_dir=MANIFEST_PATH.parent,
+                )
+            self.assertEqual(engine.active_path.read_bytes(), b"old build")
+            self.assertEqual(engine.read_installed(), old)
+
+    def test_engine_reverts_payload_when_state_write_fails_after_swap(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            engine = UpdateEngine(root)
+            old = InstalledBuild("1.0.0", "0" * 40, "old-launcher.txt")
+            engine.seed_installed(old)
+            engine.active_path.write_bytes(b"old build")
+            engine.previous_state_path.mkdir()
             with self.assertRaises(AtomicInstallError):
                 engine.update(
                     self.manifest,

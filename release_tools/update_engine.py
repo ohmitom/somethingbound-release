@@ -318,9 +318,11 @@ class UpdateEngine:
             state_temp.write_text(
                 json.dumps(new_build.as_json(), indent=2) + "\n", encoding="utf-8"
             )
+            active_existed_before_install = self.active_path.exists()
             had_state = self.state_path.exists()
             moved_old_state = False
             installed_new_state = False
+            atomic_install_done = False
             try:
                 atomic_install(
                     temporary,
@@ -328,19 +330,24 @@ class UpdateEngine:
                     backup=self.previous_path,
                     failure_hook=self.failure_hook,
                 )
+                atomic_install_done = True
                 if had_state:
                     _replace_existing(self.state_path, self.previous_state_path)
                     moved_old_state = True
                 _replace_existing(state_temp, self.state_path)
                 installed_new_state = True
             except Exception as exc:
-                # atomic_install already restores the payload. Restore metadata
-                # too, so a failed update never advertises bytes it did not keep.
                 try:
                     if installed_new_state and self.state_path.exists():
                         self.state_path.unlink()
                     if moved_old_state and self.previous_state_path.exists():
                         _replace_existing(self.previous_state_path, self.state_path)
+                    if atomic_install_done:
+                        if active_existed_before_install:
+                            if self.previous_path.exists():
+                                _replace_existing(self.previous_path, self.active_path)
+                        elif self.active_path.exists():
+                            self.active_path.unlink()
                 except Exception as rollback_exc:
                     raise AtomicInstallError(
                         f"state installation failed ({exc}); state rollback failed ({rollback_exc})"

@@ -26,6 +26,8 @@ _TIMESTAMP_RE = re.compile(
     r"[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?Z$"
 )
 _CHANNEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+_WINDOWS_DRIVE_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
+_WINDOWS_DRIVE_FILE_PATH_RE = re.compile(r"^/[A-Za-z]:[\\/]")
 
 _TOP_LEVEL_FIELDS = ("channel", "version", "gitSha", "releasedAt", "notes", "artifacts")
 _NOTE_FIELDS = ("summary", "commits")
@@ -102,6 +104,8 @@ def _check_artifact_url(value: Any, path: str, errors: list[str]) -> None:
         return
     if "\x00" in value or any(char.isspace() for char in value):
         _error(errors, path, "must not contain whitespace or NUL characters")
+        return
+    if _WINDOWS_DRIVE_PATH_RE.match(value):
         return
     try:
         parsed = urlsplit(value)
@@ -341,6 +345,8 @@ def verify_channel_artifact(
 def artifact_url_path(url: str) -> Path | None:
     """Return a local path for a plain path or ``file:`` URL, if applicable."""
 
+    if _WINDOWS_DRIVE_PATH_RE.match(url):
+        return Path(url)
     parsed = urlsplit(url)
     if parsed.scheme not in ("", "file"):
         return None
@@ -348,7 +354,10 @@ def artifact_url_path(url: str) -> Path | None:
         if parsed.netloc not in ("", "localhost"):
             # A UNC path is intentionally not accepted by the local foundation.
             raise ValueError("file URLs with a remote host are not supported")
-        return Path(unquote(parsed.path))
+        raw_path = unquote(parsed.path)
+        if _WINDOWS_DRIVE_FILE_PATH_RE.match(raw_path):
+            raw_path = raw_path[1:]
+        return Path(raw_path)
     return Path(url)
 
 
