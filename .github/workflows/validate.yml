@@ -42,6 +42,9 @@ jobs:
             fixtures/manifest.update.json \
             --artifact client=fixtures/artifacts/client.txt \
             --artifact server=fixtures/artifacts/server.txt
+          python3 -m release_tools.validate_manifest \
+            fixtures/manifest.local-dev.json \
+            --artifact launcher-local-dev.txt=fixtures/artifacts/launcher-local-dev.txt
 
       - name: Run deterministic contract tests
         run: python3 -m unittest discover --start-directory tests --verbose

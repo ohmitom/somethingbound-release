@@ -215,8 +215,29 @@ def compare_versions(left: str, right: str) -> int:
     return (left_key > right_key) - (left_key < right_key)
 
 
-def validate_manifest(manifest: Any) -> list[str]:
-    """Return deterministic validation errors for a decoded manifest object."""
+def validate_manifest(
+    manifest: Any,
+    *,
+    installed_version: str | None = None,
+    current_version: str | None = None,
+) -> list[str]:
+    """Return deterministic validation errors for a decoded manifest object.
+
+    The repository historically shipped a coordinated server/client manifest.
+    The launcher foundation adds the smaller channel contract alongside it. A
+    shape without the legacy ``release`` object is dispatched to the channel
+    validator so callers have one safe loader entry point while old contracts
+    remain readable.
+    """
+
+    if isinstance(manifest, dict) and "release" not in manifest:
+        from .channel_manifest import validate_channel_manifest
+
+        return validate_channel_manifest(
+            manifest,
+            installed_version=installed_version,
+            current_version=current_version,
+        )
 
     errors: list[str] = []
     root = _object(
@@ -412,8 +433,13 @@ def validate_manifest(manifest: Any) -> list[str]:
     return errors
 
 
-def load_manifest(path: str | Path) -> dict[str, Any]:
-    """Load and validate a JSON manifest, raising one error containing all issues."""
+def load_manifest(
+    path: str | Path,
+    *,
+    installed_version: str | None = None,
+    current_version: str | None = None,
+) -> dict[str, Any]:
+    """Load either supported manifest contract and reject all validation errors."""
 
     manifest_path = Path(path)
     try:
@@ -426,14 +452,27 @@ def load_manifest(path: str | Path) -> dict[str, Any]:
             [f"{manifest_path}: invalid JSON at line {exc.lineno}, column {exc.colno}"]
         ) from exc
 
-    errors = validate_manifest(manifest)
+    errors = validate_manifest(
+        manifest,
+        installed_version=installed_version,
+        current_version=current_version,
+    )
     if errors:
+        if isinstance(manifest, dict) and "release" not in manifest:
+            from .channel_manifest import ChannelManifestValidationError
+
+            raise ChannelManifestValidationError(errors)
         raise ManifestValidationError(errors)
     return manifest
 
 
 def verify_artifact(manifest: Any, kind: str, path: str | Path) -> list[str]:
     """Verify one local artifact against its manifest checksum and byte size."""
+
+    if isinstance(manifest, dict) and "release" not in manifest:
+        from .channel_manifest import verify_channel_artifact
+
+        return verify_channel_artifact(manifest, kind, path)
 
     errors = validate_manifest(manifest)
     if errors:

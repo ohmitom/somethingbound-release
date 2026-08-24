@@ -6,6 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from .channel_manifest import ChannelManifestValidationError
 from .manifest import ManifestValidationError, load_manifest, verify_artifact
 
 
@@ -36,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         manifest = load_manifest(args.manifest)
-    except ManifestValidationError as exc:
+    except (ManifestValidationError, ChannelManifestValidationError) as exc:
         for error in exc.errors:
             print(f"error: {error}", file=sys.stderr)
         return 1
