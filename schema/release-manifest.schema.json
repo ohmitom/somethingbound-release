@@ -1,110 +1,46 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ohmitom/somethingbound-release/blob/main/schema/release-manifest.schema.json",
-  "title": "SomethingBound release manifest",
-  "description": "Public, signed-out-of-band release metadata consumed by release tooling and launchers.",
+  "title": "SomethingBound release-channel manifest",
+  "description": "The local-first launcher release channel contract. The top-level identity fields are intentionally exactly channel, version, gitSha, releasedAt, notes, and artifacts.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "manifestSchemaVersion",
-    "release",
-    "versions",
-    "minimumCompatibleVersions",
+    "channel",
+    "version",
+    "gitSha",
+    "releasedAt",
+    "notes",
     "artifacts"
   ],
   "properties": {
-    "manifestSchemaVersion": {
-      "const": 1,
-      "description": "Version of this manifest contract, not the product release version."
+    "channel": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "description": "Named release channel, for example local-dev, beta, or stable."
     },
-    "release": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "version",
-        "gitSha",
-        "buildTimestamp",
-        "releaseNotes",
-        "previousRelease",
-        "rollbackTarget"
-      ],
-      "properties": {
-        "version": {
-          "$ref": "#/$defs/semver",
-          "description": "Human-facing product release version."
-        },
-        "gitSha": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{40}$",
-          "description": "Full lowercase Git SHA-1 for the source used to build this release."
-        },
-        "buildTimestamp": {
-          "type": "string",
-          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$",
-          "description": "UTC RFC 3339 build time."
-        },
-        "releaseNotes": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["range", "text"],
-          "properties": {
-            "range": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["from", "to"],
-              "properties": {
-                "from": {
-                  "anyOf": [
-                    { "type": "null" },
-                    { "$ref": "#/$defs/semver" }
-                  ]
-                },
-                "to": { "$ref": "#/$defs/semver" }
-              }
-            },
-            "text": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Release notes or a concise public summary."
-            },
-            "url": {
-              "type": "string",
-              "format": "uri",
-              "description": "Optional public page containing the same release notes."
-            }
-          }
-        },
-        "previousRelease": {
-          "description": "The manifest anchor used to establish the release-note range; null for the first release.",
-          "anyOf": [
-            { "type": "null" },
-            { "$ref": "#/$defs/releaseReference" }
-          ]
-        },
-        "rollbackTarget": {
-          "description": "The last known-good release to use if this promotion is rolled back; null only when none exists.",
-          "anyOf": [
-            { "type": "null" },
-            { "$ref": "#/$defs/releaseReference" }
-          ]
-        }
-      }
+    "version": {
+      "$ref": "#/$defs/semver",
+      "description": "The launcher/product version for this channel release."
     },
-    "versions": {
-      "$ref": "#/$defs/versionSet",
-      "description": "Versions produced or coordinated by this release."
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "Full lowercase Git SHA for the running build identity."
     },
-    "minimumCompatibleVersions": {
-      "$ref": "#/$defs/versionSet",
-      "description": "Lowest versions that this release is declared compatible with."
+    "releasedAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$",
+      "description": "UTC RFC 3339 release timestamp."
+    },
+    "notes": {
+      "$ref": "#/$defs/notes"
     },
     "artifacts": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["client", "server"],
-      "properties": {
-        "client": { "$ref": "#/$defs/artifact" },
-        "server": { "$ref": "#/$defs/artifact" }
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/artifact"
       }
     }
   },
@@ -114,46 +50,75 @@
       "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$",
       "description": "Semantic Versioning 2.0.0 value."
     },
-    "versionSet": {
+    "notes": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["client", "server", "protocol", "content", "ruleset", "schema"],
+      "required": ["summary", "commits"],
       "properties": {
-        "client": { "$ref": "#/$defs/semver" },
-        "server": { "$ref": "#/$defs/semver" },
-        "protocol": { "$ref": "#/$defs/semver" },
-        "content": { "$ref": "#/$defs/semver" },
-        "ruleset": { "$ref": "#/$defs/semver" },
-        "schema": { "$ref": "#/$defs/semver" }
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commits": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/commit"
+          }
+        }
       }
     },
-    "releaseReference": {
+    "commit": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["version", "manifestUrl"],
+      "required": ["sha", "subject", "category", "scope"],
       "properties": {
-        "version": { "$ref": "#/$defs/semver" },
-        "manifestUrl": {
+        "sha": {
           "type": "string",
-          "format": "uri"
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "Full commit SHA; the launcher displays its seven-character short form."
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scope": {
+          "type": ["string", "null"]
+        },
+        "pr": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "minLength": 1 }
+          ],
+          "description": "Optional pull-request reference, such as 123 or #123."
         }
       }
     },
     "artifact": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["url", "sha256", "sizeBytes"],
+      "required": ["name", "url", "sha256", "size"],
       "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^/\\\\:]+$",
+          "description": "Safe file name used for the artifact, not a path."
+        },
         "url": {
           "type": "string",
-          "format": "uri",
-          "description": "HTTPS URL for the artifact; credentials are not permitted."
+          "minLength": 1,
+          "description": "A local path, file URL, or HTTP(S) URL. Development uses local sources."
         },
         "sha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
         },
-        "sizeBytes": {
+        "size": {
           "type": "integer",
           "minimum": 0
         }
