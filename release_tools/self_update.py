@@ -197,6 +197,31 @@ def download_replacement(
     return staged
 
 
+# PyInstaller's onefile bootloader marks its own process tree with these, and
+# a child validates that its parent's executable matches its own. Inheriting
+# them across a self-update makes the new launcher believe it is a child of the
+# old one, which is a different executable, and it refuses to start with
+# "parent process has different executable".
+_BOOTLOADER_ENVIRONMENT_PREFIXES = ("_PYI",)
+_BOOTLOADER_ENVIRONMENT_NAMES = ("_MEIPASS2",)
+
+
+def clean_environment(base: dict[str, str] | None = None) -> dict[str, str]:
+    """Return an environment with the packager's private markers removed.
+
+    Anything started from inside a frozen launcher must not inherit the
+    bootloader's idea of which process tree it belongs to.
+    """
+
+    source = dict(os.environ if base is None else base)
+    return {
+        name: value
+        for name, value in source.items()
+        if not name.startswith(_BOOTLOADER_ENVIRONMENT_PREFIXES)
+        and name not in _BOOTLOADER_ENVIRONMENT_NAMES
+    }
+
+
 def relaunch(executable: str | Path, arguments: list[str] | None = None) -> None:
     """Start the newly installed launcher, detached from this one."""
 
@@ -214,6 +239,7 @@ def relaunch(executable: str | Path, arguments: list[str] | None = None) -> None
         subprocess.Popen(
             command,
             cwd=str(Path(executable).parent),
+            env=clean_environment(),
             creationflags=creation_flags,
             start_new_session=start_new_session,
             close_fds=True,
@@ -224,6 +250,7 @@ def relaunch(executable: str | Path, arguments: list[str] | None = None) -> None
 
 __all__ = [
     "RETIRED_SUFFIX",
+    "clean_environment",
     "STAGED_SUFFIX",
     "SelfUpdateError",
     "SelfUpdatePlan",

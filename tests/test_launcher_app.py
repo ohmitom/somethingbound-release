@@ -390,6 +390,14 @@ class GameProcessTests(TempDirTestCase):
             build_environment(endpoint, base={})[MANUAL_SERVER_ENDPOINT_ENV], endpoint
         )
 
+    def test_the_client_does_not_inherit_the_packagers_markers(self) -> None:
+        environment = build_environment(
+            "https://play.example.invalid",
+            base={"PATH": "x", "_PYI_ARCHIVE_FILE": "launcher.exe"},
+        )
+        self.assertNotIn("_PYI_ARCHIVE_FILE", environment)
+        self.assertEqual(environment["PATH"], "x")
+
     def test_an_unset_endpoint_is_not_inherited_from_the_launcher(self) -> None:
         command = build_command(self.payload / DEFAULT_EXECUTABLE, server_endpoint=None)
         self.assertEqual(command, [str(self.payload / DEFAULT_EXECUTABLE)])

@@ -77,7 +77,11 @@ def build_environment(
 ) -> dict[str, str]:
     """Return the environment the client is started with."""
 
-    environment = dict(os.environ if base is None else base)
+    from .self_update import clean_environment
+
+    # The client is started from inside a frozen launcher, so the packager's
+    # private markers are stripped rather than leaked into the game.
+    environment = clean_environment(None if base is None else dict(base))
     if server_endpoint:
         environment[MANUAL_SERVER_ENDPOINT_ENV] = server_endpoint
     else:

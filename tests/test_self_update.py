@@ -13,6 +13,7 @@ from release_tools.launcher_core import Launcher, LauncherError
 from release_tools.self_update import (
     SelfUpdateError,
     can_replace,
+    clean_environment,
     clean_retired,
     download_replacement,
     plan_self_update,
@@ -72,6 +73,27 @@ class PlanTests(unittest.TestCase):
 
     def test_running_from_source_has_no_executable_to_replace(self) -> None:
         self.assertIsNone(running_executable())
+
+
+class EnvironmentTests(unittest.TestCase):
+    def test_the_packagers_private_markers_are_never_inherited(self) -> None:
+        """A new launcher that inherits these refuses to start, because the
+        bootloader sees a parent whose executable is the superseded one."""
+
+        inherited = {
+            "PATH": "keep me",
+            "_PYI_PARENT_PROCESS_LEVEL": "1",
+            "_PYI_ARCHIVE_FILE": "old.exe",
+            "_MEIPASS2": "C:/Temp/_MEI123",
+        }
+
+        cleaned = clean_environment(inherited)
+
+        self.assertEqual(cleaned, {"PATH": "keep me"})
+
+    def test_an_ordinary_environment_is_untouched(self) -> None:
+        ordinary = {"PATH": "x", "SOMETHINGBOUND_SERVER_ENDPOINT": "https://a.invalid"}
+        self.assertEqual(clean_environment(ordinary), ordinary)
 
 
 class SwapTests(TempDirTestCase):
