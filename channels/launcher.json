@@ -1,21 +1,28 @@
 {
   "channel": "launcher",
-  "version": "0.1.1",
-  "gitSha": "828a953ddc18338085e61ed5f95191e3ef78e516",
-  "releasedAt": "2026-08-25T17:40:41Z",
+  "version": "0.1.2",
+  "gitSha": "a9eab35e636ed53a818c85fccd128028d122b310",
+  "releasedAt": "2026-08-25T17:58:29Z",
   "notes": {
-    "summary": "The launcher now updates itself.",
+    "summary": "Fixes the replaced launcher refusing to start after a self-update.",
     "commits": [
       {
-        "sha": "828a953ddc18338085e61ed5f95191e3ef78e516",
-        "subject": "Release launcher 0.1.1",
+        "sha": "a9eab35e636ed53a818c85fccd128028d122b310",
+        "subject": "Stop the replaced launcher refusing to start",
         "category": "change",
         "scope": null,
         "pr": null
       },
       {
-        "sha": "d485f3f86e64d83ec2b3e32cc4739fdb25f05e87",
-        "subject": "launcher 0.1.0",
+        "sha": "8bde4747984f30f211a2078a7dc2e1ffd4c09bad",
+        "subject": "Report what a packaged launcher is doing, and ask caches to revalidate",
+        "category": "change",
+        "scope": null,
+        "pr": null
+      },
+      {
+        "sha": "f0f04c7f3fdded5e7d3bc0423240fc329bb7c2cd",
+        "subject": "launcher 0.1.1",
         "category": "release",
         "scope": null,
         "pr": null
@@ -25,9 +32,9 @@
   "artifacts": [
     {
       "name": "SomethingBoundLauncher.exe",
-      "url": "https://github.com/ohmitom/somethingbound-release/releases/download/v0.1.1/SomethingBoundLauncher.exe",
-      "sha256": "bbf3fbe2a7ff3bd44ff4f7b2b997df2c7777e0255d997f266478f25a75e60542",
-      "size": 13039855
+      "url": "https://github.com/ohmitom/somethingbound-release/releases/download/v0.1.2/SomethingBoundLauncher.exe",
+      "sha256": "264a912ffac8e65f26425d520bf2b66ec457de63f1ede150ef411a94ee485317",
+      "size": 13042178
     }
   ]
 }
