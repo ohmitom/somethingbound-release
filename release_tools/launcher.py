@@ -163,8 +163,35 @@ def _run_config(args: argparse.Namespace, settings: LauncherSettings) -> int:
     return 0
 
 
+def _attach_parent_console() -> None:
+    """Let the packaged launcher print into the terminal that ran it.
+
+    The executable is built for the Windows GUI subsystem so it never flashes a
+    console behind its own window. The cost is that its subcommands write to
+    nowhere, which makes diagnosing a playtester's launcher over a terminal
+    impossible: a failure and a no-op look identical. Attaching to the calling
+    console restores the output without ever creating a window.
+    """
+
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return
+    try:
+        import ctypes
+
+        ATTACH_PARENT_PROCESS = -1
+        if not ctypes.windll.kernel32.AttachConsole(ATTACH_PARENT_PROCESS):
+            return
+        for name, stream in (("stdout", sys.stdout), ("stderr", sys.stderr)):
+            if stream is None or getattr(stream, "closed", False):
+                setattr(sys, name, open("CONOUT$", "w", encoding="utf-8", buffering=1))
+    except Exception:  # noqa: BLE001 - console output is a convenience
+        pass
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command is not None:
+        _attach_parent_console()
 
     try:
         settings = load_settings(args.data_dir)

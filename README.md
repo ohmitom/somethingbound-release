@@ -84,6 +84,19 @@ disagrees with its channel would see an update every time it started, forever.
 A launcher in a directory the player cannot write to, such as Program Files,
 reports that instead of failing part way through.
 
+### A release takes up to five minutes to be seen
+
+Channel pointers are read from `raw.githubusercontent.com`, which serves them
+with `max-age=300`. It honours neither a `Cache-Control: no-cache` request
+header nor a cache-busting query string; both were measured and both returned
+stale content. Only the GitHub Contents API returns a pointer immediately, and
+that is rate limited to 60 requests an hour per address, which is a worse
+trade for a launcher that checks on every start.
+
+So a launcher can be up to five minutes behind a release. That is accepted.
+When testing a publish, wait it out rather than concluding self-update is
+broken.
+
 ## Package the executable
 
 ```powershell

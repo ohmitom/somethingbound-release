@@ -479,8 +479,10 @@ class LauncherCoreTests(TempDirTestCase):
         payload = json.dumps(manifest).encode("utf-8")
         requested: list[str] = []
 
-        def opener(url, timeout=None):
-            requested.append(url)
+        def opener(request, timeout=None):
+            requested.append(request.full_url)
+            # A stale channel pointer is the one answer a launcher must not get.
+            self.assertEqual(request.headers.get("Cache-control"), "no-cache")
             return io.BytesIO(payload)
 
         settings = LauncherSettings(

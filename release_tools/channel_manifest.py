@@ -322,8 +322,18 @@ def read_channel_manifest_source(
         if scheme in ("http", "https") and not _WINDOWS_DRIVE_PATH_RE.match(source):
             _check_manifest_url(source)
             request_opener = opener or urllib.request.urlopen
+            # Channel pointers are served from caching CDNs, so ask for
+            # revalidation. Measured behaviour: raw.githubusercontent ignores
+            # this, and ignores a cache-busting query string too. It sends
+            # max-age=300, so a launcher can be up to five minutes behind a
+            # release. That delay is accepted; the header is still correct for
+            # a self-hosted or differently-cached channel.
+            request = urllib.request.Request(
+                source,
+                headers={"Cache-Control": "no-cache", "Pragma": "no-cache"},
+            )
             try:
-                with request_opener(source, timeout=timeout) as stream:
+                with request_opener(request, timeout=timeout) as stream:
                     raw = stream.read(MANIFEST_SIZE_LIMIT + 1)
             except (OSError, ValueError, urllib.error.URLError) as exc:
                 raise ChannelManifestValidationError(
