@@ -123,12 +123,17 @@ def download_and_verify(
     base_dir: str | Path | None = None,
     timeout: float = 15.0,
     opener: Callable[..., Any] | None = None,
+    progress: Callable[[int, int], None] | None = None,
 ) -> Path:
     """Download one artifact to ``destination`` and verify size and SHA-256.
 
     ``file:``, relative local paths, and HTTP(S) URLs are supported.  The
     destination is written directly by this helper; callers should pass a
     temporary path when an atomic installation is required.
+
+    ``progress`` is called with the byte count read so far and the manifest's
+    declared total, so a user interface can report a long download.  It is
+    advisory only: verification still decides whether the bytes are accepted.
     """
 
     destination_path = Path(destination)
@@ -154,6 +159,8 @@ def download_and_verify(
                     output.write(chunk)
                     digest.update(chunk)
                     size += len(chunk)
+                    if progress is not None:
+                        progress(size, artifact["size"])
     except (OSError, ValueError, urllib.error.URLError) as exc:
         destination_path.unlink(missing_ok=True)
         raise UpdateError(f"cannot download artifact {artifact['name']!r}: {exc}") from exc

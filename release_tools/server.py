@@ -59,6 +59,17 @@ def _clean_optional(value: Any, name: str) -> str | None:
     return value or None
 
 
+def validate_server_endpoint(value: str, name: str = "server endpoint") -> str:
+    """Return ``value`` when it is a safe server endpoint, or raise.
+
+    HTTPS is required everywhere except a localhost development server, and
+    credentials are never accepted.  ``name`` appears in the error so a user
+    interface can say which field was refused.
+    """
+
+    return _validate_endpoint(value, name)
+
+
 def _validate_endpoint(value: str, name: str) -> str:
     if any(character.isspace() for character in value):
         raise ServerEndpointConfigurationError(f"{name} must not contain whitespace")
@@ -259,6 +270,7 @@ __all__ = [
     "ServerEndpointConfigurationError",
     "resolve_server_endpoint",
     "resolve_server_endpoint_from_environment",
+    "validate_server_endpoint",
     "validate_server_health",
 ]
 

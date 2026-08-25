@@ -1,0 +1,26 @@
+{
+  "channel": "playtest",
+  "version": "0.0.0-bootstrap.1",
+  "gitSha": "18a7d1558ebe08eb6f35dba1b33c81d67130003e",
+  "releasedAt": "2026-08-22T18:34:50Z",
+  "notes": {
+    "summary": "Bootstrap channel entry. Infrastructure only; not a playable build.",
+    "commits": [
+      {
+        "sha": "18a7d1558ebe08eb6f35dba1b33c81d67130003e",
+        "subject": "Add release contracts and deployment automation",
+        "category": "feat",
+        "scope": "release",
+        "pr": 1
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "name": "client-artifact.zip",
+      "url": "https://github.com/ohmitom/somethingbound-release/releases/download/v0.0.0-bootstrap.1/client-artifact.zip",
+      "sha256": "d7293d8c2f9f23a31d2638bd06243849745d94c036bf897cfcb1b0ee5eb424fb",
+      "size": 50569294
+    }
+  ]
+}
