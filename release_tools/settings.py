@@ -204,7 +204,11 @@ def load_settings(data_dir: str | Path | None = None) -> LauncherSettings:
 
     path = settings_path(data_dir)
     try:
-        raw = path.read_text(encoding="utf-8")
+        # utf-8-sig, because Notepad, PowerShell Out-File, and Set-Content all
+        # write a byte order mark by default on Windows. A player who edits
+        # this file with any of them must not end up with a launcher that
+        # cannot read its own settings.
+        raw = path.read_text(encoding="utf-8-sig")
     except FileNotFoundError:
         return LauncherSettings()
     except OSError as exc:

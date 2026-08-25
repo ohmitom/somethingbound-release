@@ -17,7 +17,7 @@ import sys
 import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, ttk
+from tkinter import filedialog, messagebox, ttk
 from typing import Any, Callable
 
 from .launcher_core import Launcher, LauncherError, LauncherStatus
@@ -495,6 +495,23 @@ class LauncherWindow:
             return
         self.root.destroy()
 
+    def report_settings_problem(self, problem: str) -> None:
+        """Tell the player their settings were unreadable, once the window is up."""
+
+        self.status_label.configure(
+            text="Settings could not be read. Running with defaults."
+        )
+        self.root.after(
+            120,
+            lambda: messagebox.showwarning(
+                "SomethingBound",
+                "Your launcher settings could not be read, so the defaults are in "
+                "use. Opening Settings and saving will replace the unreadable "
+                "file.\n\n" + problem,
+                parent=self.root,
+            ),
+        )
+
     def _open_settings(self) -> None:
         SettingsDialog(self)
 
@@ -714,6 +731,29 @@ def run(settings: LauncherSettings, *, data_dir: Path | None = None) -> int:
     return 0
 
 
+def start(data_dir: Path | None = None) -> int:
+    """Open the launcher, surviving settings it cannot read.
+
+    A windowed executable that exits on a bad settings file simply never
+    appears, which a player cannot tell apart from a broken download.  Show
+    the problem and carry on from defaults instead.
+    """
+
+    problem: str | None = None
+    try:
+        settings = load_settings(data_dir)
+    except SettingsError as exc:
+        settings = LauncherSettings()
+        problem = str(exc)
+
+    root = tk.Tk()
+    window = LauncherWindow(root, settings, data_dir=data_dir)
+    if problem is not None:
+        window.report_settings_problem(problem)
+    root.mainloop()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Open the SomethingBound launcher.")
     parser.add_argument(
@@ -726,12 +766,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    try:
-        settings = load_settings(args.data_dir)
-    except SettingsError as exc:
-        print(f"launcher settings error: {exc}", file=sys.stderr)
-        return 1
-    return run(settings, data_dir=args.data_dir)
+    return start(args.data_dir)
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import codecs
 import hashlib
 import io
 import json
@@ -344,6 +345,17 @@ class SettingsTests(TempDirTestCase):
             settings_from_json({"executableName": "sub/dir/Game.exe"})
         with self.assertRaises(SettingsError):
             settings_from_json({"autoUpdate": "yes"})
+
+    def test_a_byte_order_mark_does_not_brick_the_launcher(self) -> None:
+        """Notepad, Out-File, and Set-Content all write one by default."""
+
+        body = json.dumps({"channel": "beta", "serverEndpoint": None})
+        (self.root / "launcher.json").write_bytes(codecs.BOM_UTF8 + body.encode("utf-8"))
+
+        settings = load_settings(self.root)
+
+        self.assertEqual(settings.channel, "beta")
+        self.assertIsNone(settings.server_endpoint)
 
     def test_writing_settings_never_leaves_a_truncated_file(self) -> None:
         save_settings(LauncherSettings(server_endpoint="https://a.invalid"), self.root)
