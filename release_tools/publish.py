@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .channel_manifest import ChannelManifestValidationError, validate_channel_manifest
+from .manifest import _GIT_SHA_RE
 
 GITHUB_API = "https://api.github.com"
 GITHUB_UPLOADS = "https://uploads.github.com"
@@ -124,12 +125,33 @@ def parse_commit(sha: str, subject: str) -> dict[str, Any]:
     }
 
 
+def anchor_is_reachable(repo: Path, sha: str) -> bool:
+    """Whether a previous release anchor is a commit in this repository.
+
+    A channel can name an anchor this repository has never seen: the channel
+    was seeded from elsewhere, history was rewritten, or the commit was pruned.
+    """
+
+    try:
+        _git(repo, "cat-file", "-e", f"{sha}^{{commit}}")
+    except PublishError:
+        return False
+    return True
+
+
 def collect_commits(repo: Path, *, since: str | None, until: str = "HEAD") -> list[dict[str, Any]]:
     """Return first-parent commits in the published range, newest first.
 
     First-parent history is what a tester recognises: one entry per merge to
     main rather than every commit on every branch behind it.
+
+    An anchor this repository does not contain is treated as no anchor at all,
+    so the release is labelled an initial release rather than failing or
+    inventing a range.
     """
+
+    if since is not None and not anchor_is_reachable(repo, since):
+        since = None
 
     span = until if since is None else f"{since}..{until}"
     arguments = ["log", "--first-parent", f"--format=%H{_RECORD}%s{_LINE}"]
@@ -343,6 +365,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="publish even though the game repository has uncommitted changes",
     )
+    parser.add_argument(
+        "--git-sha",
+        help=(
+            "commit the build was made from. Supplying it asserts that the caller "
+            "already verified the tree, which is what the build script does before "
+            "the build writes the version into project settings."
+        ),
+    )
     return parser
 
 
@@ -360,15 +390,29 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     try:
-        if not args.allow_dirty and not working_tree_is_clean(args.game_repo):
-            raise PublishError(
-                "the game repository has uncommitted changes, so this build cannot be "
-                "attributed to a commit. Commit them or pass --allow-dirty."
-            )
-
-        git_sha = head_sha(args.game_repo)
+        if args.git_sha:
+            # The caller verified the tree before the build ran.  Checking it
+            # again here would fail on the version the build itself wrote into
+            # project settings.
+            git_sha = args.git_sha.strip().lower()
+            if _GIT_SHA_RE.fullmatch(git_sha) is None:
+                raise PublishError("--git-sha must be 40 lowercase hexadecimal characters")
+        else:
+            if not args.allow_dirty and not working_tree_is_clean(args.game_repo):
+                raise PublishError(
+                    "the game repository has uncommitted changes, so this build cannot be "
+                    "attributed to a commit. Commit them or pass --allow-dirty."
+                )
+            git_sha = head_sha(args.game_repo)
         tag = f"v{args.version}"
         previous = _previous_sha(args.channels_dir, args.channel)
+        if previous is not None and not anchor_is_reachable(args.game_repo, previous):
+            print(
+                f"note: the previous channel anchor {previous[:7]} is not a commit in "
+                f"{args.game_repo}, so this is an initial release for the "
+                f"{args.channel} channel"
+            )
+            previous = None
         commits = collect_commits(args.game_repo, since=previous)
         summary = args.summary or (
             commits[0]["subject"] if commits else f"SomethingBound {args.version}."

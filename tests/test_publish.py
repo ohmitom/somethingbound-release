@@ -14,6 +14,7 @@ from release_tools.install_tree import TreeInstaller
 from release_tools.publish import (
     INITIAL_RELEASE_COMMIT_LIMIT,
     PublishError,
+    anchor_is_reachable,
     build_manifest,
     collect_commits,
     find_token,
@@ -97,6 +98,25 @@ class GitRangeTests(unittest.TestCase):
         commits = collect_commits(self.repo, since=None)
 
         self.assertEqual(len(commits), INITIAL_RELEASE_COMMIT_LIMIT)
+
+    def test_an_anchor_from_another_repository_falls_back_to_initial(self) -> None:
+        """A channel seeded elsewhere must not fail every later publish."""
+
+        self._commit("feat(a): One")
+        self._commit("fix(b): Two")
+        stranger = "9" * 40
+
+        self.assertFalse(anchor_is_reachable(self.repo, stranger))
+        commits = collect_commits(self.repo, since=stranger)
+
+        self.assertEqual([note["subject"] for note in commits], ["Two", "One"])
+
+    def test_a_reachable_anchor_is_still_honoured(self) -> None:
+        first = self._commit("feat(a): One")
+        self._commit("fix(b): Two")
+
+        self.assertTrue(anchor_is_reachable(self.repo, first))
+        self.assertEqual(len(collect_commits(self.repo, since=first)), 1)
 
     def test_a_dirty_tree_is_visible_before_a_release_claims_a_commit(self) -> None:
         self._commit("feat(a): One")
