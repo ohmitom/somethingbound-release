@@ -1,82 +1,33 @@
 {
   "channel": "launcher",
-  "version": "0.1.0",
-  "gitSha": "b50af7a32eaf0eaed443f400971d80859dfc1fff",
-  "releasedAt": "2026-08-25T17:39:39Z",
+  "version": "0.1.1",
+  "gitSha": "828a953ddc18338085e61ed5f95191e3ef78e516",
+  "releasedAt": "2026-08-25T17:40:41Z",
   "notes": {
-    "summary": "First hand-delivered launcher. It updates itself from here on.",
+    "summary": "The launcher now updates itself.",
     "commits": [
       {
-        "sha": "b50af7a32eaf0eaed443f400971d80859dfc1fff",
-        "subject": "Let the launcher update itself",
+        "sha": "828a953ddc18338085e61ed5f95191e3ef78e516",
+        "subject": "Release launcher 0.1.1",
         "category": "change",
         "scope": null,
         "pr": null
       },
       {
-        "sha": "9845a3892359ac8cf1f40b9fe792418d362fa615",
-        "subject": "Never let the launcher fail to appear",
-        "category": "change",
-        "scope": null,
-        "pr": null
-      },
-      {
-        "sha": "95c7b1c98a0cacb4b0a72f2a7e26e7ba9530fc91",
-        "subject": "playtest 0.2.0",
+        "sha": "d485f3f86e64d83ec2b3e32cc4739fdb25f05e87",
+        "subject": "launcher 0.1.0",
         "category": "release",
         "scope": null,
         "pr": null
-      },
-      {
-        "sha": "b65c0bb8a0f576a1bf5a72c400eb4286f97f0d0e",
-        "subject": "Stop sending the client commit as the GitHub release target",
-        "category": "change",
-        "scope": null,
-        "pr": null
-      },
-      {
-        "sha": "ee3df7c3bd406e0c2220f42ab5a8984dafe3b8bc",
-        "subject": "Keep repository work out of the player-facing patch notes",
-        "category": "change",
-        "scope": null,
-        "pr": null
-      },
-      {
-        "sha": "f4af72ef30586ebc4ee1c106f3f96b889ced7d88",
-        "subject": "Treat an unreachable channel anchor as an initial release",
-        "category": "change",
-        "scope": null,
-        "pr": null
-      },
-      {
-        "sha": "7f14aeff36b494021a6f242c356fa279a7a100b1",
-        "subject": "Merge the auto-updating Windows launcher",
-        "category": "change",
-        "scope": null,
-        "pr": null
-      },
-      {
-        "sha": "3de7868a9a3336a013fb000b82378251b3f62d3d",
-        "subject": "add launcher release-channel manifest and update-engine foundation",
-        "category": "feat",
-        "scope": "release_tools",
-        "pr": 2
-      },
-      {
-        "sha": "18a7d1558ebe08eb6f35dba1b33c81d67130003e",
-        "subject": "Add release contracts and deployment automation",
-        "category": "change",
-        "scope": null,
-        "pr": 1
       }
     ]
   },
   "artifacts": [
     {
       "name": "SomethingBoundLauncher.exe",
-      "url": "https://github.com/ohmitom/somethingbound-release/releases/download/v0.1.0/SomethingBoundLauncher.exe",
-      "sha256": "6fbbcecc0c5a806239f70f3d28211a261dbfd325b95f9d40b1370003a16548a2",
-      "size": 13041034
+      "url": "https://github.com/ohmitom/somethingbound-release/releases/download/v0.1.1/SomethingBoundLauncher.exe",
+      "sha256": "bbf3fbe2a7ff3bd44ff4f7b2b997df2c7777e0255d997f266478f25a75e60542",
+      "size": 13039855
     }
   ]
 }
