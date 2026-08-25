@@ -15,6 +15,7 @@ from release_tools.publish import (
     INITIAL_RELEASE_COMMIT_LIMIT,
     PublishError,
     anchor_is_reachable,
+    filter_player_facing,
     build_manifest,
     collect_commits,
     find_token,
@@ -55,6 +56,58 @@ class CommitNoteTests(unittest.TestCase):
     def test_the_full_sha_is_retained_and_lowercased(self) -> None:
         note = parse_commit(SHA.upper(), "fix: Something")
         self.assertEqual(note["sha"], SHA)
+
+
+class PlayerFacingNoteTests(unittest.TestCase):
+    def _notes(self, *subjects: str) -> list[dict]:
+        return [parse_commit(SHA, subject) for subject in subjects]
+
+    def test_repository_work_is_hidden_from_players(self) -> None:
+        commits = self._notes(
+            "feat(world): Build the first outdoor gate",
+            "docs: reflow a paragraph",
+            "fix(login): Stop the flicker",
+            "chore: bump a pin",
+            "ci: retry the runner",
+        )
+
+        kept = filter_player_facing(commits)
+
+        self.assertEqual(
+            [note["subject"] for note in kept],
+            ["Build the first outdoor gate", "Stop the flicker"],
+        )
+
+    def test_a_breaking_marker_does_not_smuggle_a_category_through(self) -> None:
+        self.assertEqual(filter_player_facing(self._notes("docs!: rewrite it all")), [])
+        self.assertEqual(len(filter_player_facing(self._notes("feat!: replace saves"))), 1)
+
+    def test_uncategorised_commits_are_kept(self) -> None:
+        """A plain subject parses as "change" and is real work until proven otherwise."""
+
+        kept = filter_player_facing(self._notes("Polish the login screen"))
+        self.assertEqual(len(kept), 1)
+
+    def test_a_release_of_only_internal_work_still_produces_a_valid_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            build = root / "build"
+            build.mkdir()
+            (build / "SomethingBound.exe").write_text("player", encoding="utf-8")
+            archive = package_build(build, root / "client.zip")
+
+            manifest = build_manifest(
+                channel="playtest",
+                version="0.3.1",
+                git_sha=SHA,
+                artifact=archive,
+                artifact_url=archive.name,
+                summary="Documentation only.",
+                commits=filter_player_facing(self._notes("docs: tidy", "chore: pin")),
+            )
+
+        self.assertEqual(validate_channel_manifest(manifest), [])
+        self.assertEqual(manifest["notes"]["commits"], [])
 
 
 class GitRangeTests(unittest.TestCase):

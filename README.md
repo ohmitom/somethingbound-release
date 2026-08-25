@@ -83,6 +83,10 @@ $env:SOMETHINGBOUND_RELEASE_TOKEN = '<token with contents:write on this repo>'
 ./tools/publish-playtest.ps1 -Version 0.3.0 -Publish
 ```
 
+Documentation, chore, and CI commits are dropped from the player-facing notes;
+`--include-internal` keeps them. The manifest still records the exact range
+through `gitSha`, so nothing is lost by filtering.
+
 Publishing uploads the artifact and manifest to a GitHub release and rewrites
 `channels/<channel>.json`. **The promotion is not finished until that pointer is
 committed and pushed**, because the pointer is what installed launchers read.

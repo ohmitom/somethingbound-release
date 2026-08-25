@@ -46,6 +46,12 @@ _LINE = "\x1e"
 # How many commits the very first release on a channel lists.
 INITIAL_RELEASE_COMMIT_LIMIT = 20
 
+# Conventional-commit categories that describe work on the repository rather
+# than a change to the game. A playtester reading the notes gains nothing from
+# them. The release still records the exact range through gitSha, so filtering
+# hides noise without losing history.
+INTERNAL_NOTE_CATEGORIES = frozenset({"docs", "chore", "ci"})
+
 
 class PublishError(RuntimeError):
     """A release could not be prepared or uploaded."""
@@ -170,6 +176,24 @@ def collect_commits(repo: Path, *, since: str | None, until: str = "HEAD") -> li
         if sha and subject:
             commits.append(parse_commit(sha, subject))
     return commits
+
+
+def filter_player_facing(
+    commits: Iterable[dict[str, Any]],
+    *,
+    internal: frozenset[str] = INTERNAL_NOTE_CATEGORIES,
+) -> list[dict[str, Any]]:
+    """Drop commits whose category describes repository work, not the game.
+
+    A breaking marker is stripped before the comparison, so ``docs!`` is still
+    recognised as documentation.
+    """
+
+    return [
+        commit
+        for commit in commits
+        if str(commit.get("category", "")).rstrip("!").lower() not in internal
+    ]
 
 
 def package_build(build_dir: str | Path, destination: str | Path) -> Path:
@@ -366,6 +390,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="publish even though the game repository has uncommitted changes",
     )
     parser.add_argument(
+        "--include-internal",
+        action="store_true",
+        help=(
+            "keep documentation, chore, and CI commits in the player-facing notes "
+            "instead of filtering them out"
+        ),
+    )
+    parser.add_argument(
         "--git-sha",
         help=(
             "commit the build was made from. Supplying it asserts that the caller "
@@ -414,6 +446,16 @@ def main(argv: list[str] | None = None) -> int:
             )
             previous = None
         commits = collect_commits(args.game_repo, since=previous)
+        if not args.include_internal:
+            kept = filter_player_facing(commits)
+            hidden = len(commits) - len(kept)
+            if hidden:
+                print(
+                    f"note: hiding {hidden} internal commit(s) from the player-facing "
+                    f"notes ({', '.join(sorted(INTERNAL_NOTE_CATEGORIES))}); "
+                    "the exact range is still recorded by gitSha"
+                )
+            commits = kept
         summary = args.summary or (
             commits[0]["subject"] if commits else f"SomethingBound {args.version}."
         )
