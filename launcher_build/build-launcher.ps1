@@ -80,6 +80,11 @@ try {
     $exe = Join-Path $distDir 'SomethingBoundLauncher.exe'
     if (-not (Test-Path $exe)) { throw "PyInstaller reported success but $exe does not exist." }
 
+    # Stamp the version the executable was actually built with, so publishing
+    # cannot claim a different one and leave every player in an update loop.
+    $version = & $Python -c "import release_tools; print(release_tools.__version__)"
+    Set-Content -Path ($exe + '.version') -Value $version.Trim() -Encoding ascii -NoNewline
+
     $size = [math]::Round((Get-Item $exe).Length / 1MB, 1)
     Write-Host ''
     Write-Host "Built $exe ($size MB)"

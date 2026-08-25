@@ -18,6 +18,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import urllib.error
@@ -214,6 +215,28 @@ def package_build(build_dir: str | Path, destination: str | Path) -> Path:
     return archive
 
 
+VERSION_STAMP_SUFFIX = ".version"
+
+
+def verify_version_stamp(artifact: Path, version: str) -> None:
+    """Refuse an executable whose built-in version is not the one being claimed.
+
+    A launcher that reports 0.1.0 while its channel says 0.2.0 sees an update
+    every single time it starts, forever. The build writes a stamp beside the
+    executable so that mismatch is caught here rather than by every player.
+    """
+
+    stamp = artifact.with_name(artifact.name + VERSION_STAMP_SUFFIX)
+    if not stamp.is_file():
+        return
+    built = stamp.read_text(encoding="utf-8").strip()
+    if built != version:
+        raise PublishError(
+            f"{artifact.name} was built as version {built!r} but is being published "
+            f"as {version!r}. Rebuild it, or publish the version it was built as."
+        )
+
+
 def sha256_of(path: str | Path) -> str:
     digest = hashlib.sha256()
     with Path(path).open("rb") as stream:
@@ -365,7 +388,16 @@ def build_parser() -> argparse.ArgumentParser:
         prog="publish",
         description="Package a client build and publish it to a release channel.",
     )
-    parser.add_argument("--build-dir", type=Path, required=True, help="built client directory")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--build-dir", type=Path, help="built client directory to package")
+    source.add_argument(
+        "--artifact-file",
+        type=Path,
+        help=(
+            "publish one existing file as the artifact instead of packaging a "
+            "directory. This is how the launcher executable is released."
+        ),
+    )
     parser.add_argument("--version", required=True, help="SemVer version for this release")
     parser.add_argument(
         "--game-repo",
@@ -473,8 +505,18 @@ def main(argv: list[str] | None = None) -> int:
             commits[0]["subject"] if commits else f"SomethingBound {args.version}."
         )
 
-        artifact_name = f"somethingbound-client-{args.version}.zip"
-        artifact = package_build(args.build_dir, args.staging / artifact_name)
+        if args.artifact_file is not None:
+            if not args.artifact_file.is_file():
+                raise PublishError(f"artifact file does not exist: {args.artifact_file}")
+            verify_version_stamp(args.artifact_file, args.version)
+            artifact_name = args.artifact_file.name
+            artifact = args.staging / artifact_name
+            artifact.parent.mkdir(parents=True, exist_ok=True)
+            if artifact.resolve() != args.artifact_file.resolve():
+                shutil.copyfile(args.artifact_file, artifact)
+        else:
+            artifact_name = f"somethingbound-client-{args.version}.zip"
+            artifact = package_build(args.build_dir, args.staging / artifact_name)
         manifest = build_manifest(
             channel=args.channel,
             version=args.version,

@@ -23,6 +23,11 @@ from typing import Any, Mapping
 from .server import ServerEndpointConfigurationError, validate_server_endpoint
 
 DEFAULT_CHANNEL = "playtest"
+
+# The launcher watches its own channel, separate from the client's, because the
+# two version independently: the client ships constantly and the launcher
+# almost never.
+LAUNCHER_CHANNEL = "launcher"
 DEFAULT_EXECUTABLE = "SomethingBound.exe"
 SETTINGS_FILE_NAME = "launcher.json"
 
@@ -48,6 +53,7 @@ _FIELDS = (
     "serverEndpoint",
     "executableName",
     "autoUpdate",
+    "launcherManifestUrl",
 )
 
 
@@ -86,11 +92,22 @@ class LauncherSettings:
     server_endpoint: str | None = DEFAULT_SERVER_ENDPOINT
     executable_name: str = DEFAULT_EXECUTABLE
     auto_update: bool = True
+    launcher_manifest_url: str = ""
 
     def resolved_manifest_url(self) -> str:
         """Return the configured channel source, or the published default."""
 
         return self.manifest_url or default_manifest_url(self.channel)
+
+    def resolved_launcher_manifest_url(self) -> str:
+        """Return the launcher's own channel source.
+
+        Pointing the client channel somewhere else, at a local file for
+        development say, must not also redirect where the launcher looks for
+        its own updates.
+        """
+
+        return self.launcher_manifest_url or default_manifest_url(LAUNCHER_CHANNEL)
 
     def resolved_install_dir(self) -> Path:
         """Return the configured install root, or the per-user default."""
@@ -107,6 +124,7 @@ class LauncherSettings:
             "serverEndpoint": self.server_endpoint,
             "executableName": self.executable_name,
             "autoUpdate": self.auto_update,
+            "launcherManifestUrl": self.launcher_manifest_url,
         }
 
     def with_server_endpoint(self, endpoint: str | None) -> "LauncherSettings":
@@ -156,6 +174,7 @@ def settings_from_json(values: Any) -> LauncherSettings:
 
     channel = _string(values, "channel", DEFAULT_CHANNEL).strip() or DEFAULT_CHANNEL
     manifest_url = _string(values, "manifestUrl", "").strip()
+    launcher_manifest_url = _string(values, "launcherManifestUrl", "").strip()
     executable_name = _string(values, "executableName", DEFAULT_EXECUTABLE).strip()
     if not executable_name:
         executable_name = DEFAULT_EXECUTABLE
@@ -191,6 +210,7 @@ def settings_from_json(values: Any) -> LauncherSettings:
         server_endpoint=server_endpoint,
         executable_name=executable_name,
         auto_update=auto_update,
+        launcher_manifest_url=launcher_manifest_url,
     )
 
 
@@ -251,6 +271,7 @@ __all__ = [
     "DEFAULT_EXECUTABLE",
     "DEFAULT_SERVER_ENDPOINT",
     "DEFAULT_MANIFEST_URL_TEMPLATE",
+    "LAUNCHER_CHANNEL",
     "LauncherSettings",
     "SETTINGS_FILE_NAME",
     "SettingsError",

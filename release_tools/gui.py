@@ -20,6 +20,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any, Callable
 
+from . import __version__
 from .launcher_core import Launcher, LauncherError, LauncherStatus
 from .server import ServerEndpointConfigurationError
 from .settings import (
@@ -102,6 +103,10 @@ class LauncherWindow:
         self.worker = _Worker()
         self.status: LauncherStatus | None = None
         self._action: str = "none"
+        self._launcher_manifest: dict[str, Any] | None = None
+        # Windows keeps the previous executable's image open until this process
+        # replaced it and started, so the retired copy is cleared here.
+        self.launcher.tidy_previous_launcher()
 
         root.title("SomethingBound")
         root.configure(background=BACKDROP)
@@ -238,7 +243,12 @@ class LauncherWindow:
         header = ttk.Frame(self.root, style="Launcher.TFrame", padding=(28, 22, 28, 12))
         header.pack(fill="x")
 
-        ttk.Label(header, text="SOMETHINGBOUND", style="Title.TLabel").pack(anchor="w")
+        title = ttk.Frame(header, style="Launcher.TFrame")
+        title.pack(fill="x")
+        ttk.Label(title, text="SOMETHINGBOUND", style="Title.TLabel").pack(side="left")
+        ttk.Label(title, text=f"launcher {__version__}", style="Caption.TLabel").pack(
+            side="right", pady=(14, 0)
+        )
         self.channel_label = ttk.Label(header, text="", style="Caption.TLabel")
         self.channel_label.pack(anchor="w", pady=(2, 0))
 
@@ -362,6 +372,7 @@ class LauncherWindow:
             "install": ("INSTALL", TEAL),
             "update": ("UPDATE", AMBER),
             "play": ("PLAY", TEAL),
+            "self-update": ("UPDATE LAUNCHER", MAGENTA),
             "none": ("PLAY", TEAL),
         }
         text, colour = labels.get(action, ("PLAY", TEAL))
@@ -457,7 +468,19 @@ class LauncherWindow:
             return
         self._busy("Checking the release channel...")
         self.launcher = Launcher(self.settings)
-        self.worker.run("status", self.launcher.status)
+
+        def job() -> tuple[LauncherStatus, dict[str, Any] | None]:
+            status = self.launcher.status()
+            try:
+                manifest = self.launcher.fetch_launcher_manifest()
+                available = self.launcher.launcher_plan(manifest).available
+            except LauncherError:
+                # A launcher channel that cannot be read must never stop
+                # someone playing the client they already have.
+                return status, None
+            return status, manifest if available else None
+
+        self.worker.run("status", job)
 
     def _busy(self, message: str) -> None:
         self.action_button.configure(state="disabled", cursor="arrow")
@@ -469,7 +492,22 @@ class LauncherWindow:
     def _on_action(self) -> None:
         if self.worker.busy or self.status is None:
             return
-        if self._action in ("install", "update"):
+        if self._action == "self-update":
+            manifest = self._launcher_manifest
+            if manifest is None:
+                return
+            self._busy("Downloading the new launcher...")
+
+            def job() -> Any:
+                return self.launcher.update_launcher(
+                    manifest,
+                    progress=lambda done, total: self.worker.post(
+                        "progress", (done, total)
+                    ),
+                )
+
+            self.worker.run("self-update", job)
+        elif self._action in ("install", "update"):
             manifest = self.status.manifest
             if manifest is None:
                 return
@@ -553,7 +591,20 @@ class LauncherWindow:
 
         if kind == "status:done":
             self._idle()
-            self._render(payload)
+            status, launcher_manifest = payload
+            self._launcher_manifest = launcher_manifest
+            self._render(status)
+            if launcher_manifest is not None:
+                self._set_action(
+                    "self-update",
+                    f"A newer launcher is available: {__version__} to "
+                    f"{launcher_manifest['version']}.",
+                )
+        elif kind == "self-update:done":
+            self.status_label.configure(
+                text="The updated launcher is starting..."
+            )
+            self.root.after(400, self.root.destroy)
         elif kind == "update:done":
             self._idle()
             self.progress.configure(value=1000)
@@ -562,7 +613,7 @@ class LauncherWindow:
                     text=f"Installed {payload.installed.build.version}."
                 )
             self.refresh()
-        elif kind in ("status:failed", "update:failed"):
+        elif kind in ("status:failed", "update:failed", "self-update:failed"):
             self._idle()
             self.progress.configure(value=0)
             message = str(payload) or payload.__class__.__name__

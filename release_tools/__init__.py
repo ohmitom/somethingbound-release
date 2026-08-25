@@ -1,5 +1,11 @@
 """Dependency-free SomethingBound release and launcher foundation tools."""
 
+# The launcher's own version, and the single source of truth for it. The frozen
+# executable carries whatever this said when it was built, and publishing the
+# launcher channel reads the same constant, so the running launcher and the
+# channel it checks can never disagree about what version means.
+__version__ = "0.1.0"
+
 from .channel_manifest import (
     ChannelManifestValidationError,
     load_channel_manifest,

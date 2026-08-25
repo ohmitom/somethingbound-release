@@ -14,6 +14,7 @@ from release_tools.install_tree import TreeInstaller
 from release_tools.publish import (
     Release,
     release_payload,
+    verify_version_stamp,
     INITIAL_RELEASE_COMMIT_LIMIT,
     PublishError,
     anchor_is_reachable,
@@ -267,6 +268,37 @@ class PackagingTests(unittest.TestCase):
                 summary="A release.",
                 commits=[],
             )
+
+
+class VersionStampTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temp.cleanup)
+        self.root = Path(self._temp.name)
+        self.artifact = self.root / "SomethingBoundLauncher.exe"
+        self.artifact.write_text("launcher", encoding="utf-8")
+
+    def _stamp(self, version: str) -> None:
+        self.artifact.with_name(self.artifact.name + ".version").write_text(
+            version, encoding="utf-8"
+        )
+
+    def test_a_mismatched_stamp_stops_the_release(self) -> None:
+        """Publishing 0.2.0 with a 0.1.0 binary loops every player forever."""
+
+        self._stamp("0.1.0")
+        with self.assertRaises(PublishError) as context:
+            verify_version_stamp(self.artifact, "0.2.0")
+        self.assertIn("built as version", str(context.exception))
+
+    def test_a_matching_stamp_passes(self) -> None:
+        self._stamp("0.2.0")
+        verify_version_stamp(self.artifact, "0.2.0")
+
+    def test_an_absent_stamp_is_not_an_error(self) -> None:
+        """A client zip has no stamp and must still publish."""
+
+        verify_version_stamp(self.artifact, "0.2.0")
 
 
 class ReleasePayloadTests(unittest.TestCase):

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from . import __version__ as LAUNCHER_VERSION
 from .channel_manifest import (
     ChannelManifestValidationError,
     load_channel_manifest,
@@ -21,6 +22,18 @@ from .channel_manifest import (
 from .game_process import GameLaunchError, find_executable, start_game
 from .install_tree import InstalledTree, TreeInstaller, TreeUpdateResult
 from .patch_notes import render_patch_notes
+from .self_update import (
+    SelfUpdateError,
+    SelfUpdatePlan,
+    can_replace,
+    clean_retired,
+    download_replacement,
+    plan_self_update,
+    relaunch,
+    running_executable,
+    staged_path,
+    swap_in_place,
+)
 from .settings import LauncherSettings
 from .update_engine import UpdateError
 
@@ -193,6 +206,77 @@ class Launcher:
         except GameLaunchError as exc:
             raise LauncherError(str(exc)) from exc
 
+    # -- the launcher updating itself ------------------------------------
+
+    def fetch_launcher_manifest(self) -> dict[str, Any]:
+        """Fetch and validate the launcher's own channel."""
+
+        source = self.settings.resolved_launcher_manifest_url()
+        try:
+            return load_channel_manifest(
+                source, opener=self._opener, timeout=self.timeout
+            )
+        except ChannelManifestValidationError as exc:
+            raise LauncherError(f"launcher channel was rejected: {exc}") from exc
+
+    def launcher_plan(self, manifest: dict[str, Any] | None = None) -> SelfUpdatePlan:
+        """Decide whether a newer launcher is published."""
+
+        if manifest is None:
+            manifest = self.fetch_launcher_manifest()
+        return plan_self_update(manifest, LAUNCHER_VERSION)
+
+    def update_launcher(
+        self,
+        manifest: dict[str, Any],
+        *,
+        progress: Callable[[int, int], None] | None = None,
+    ) -> Path:
+        """Replace this launcher with the published one and start it.
+
+        Returns the path the superseded launcher was retired to.  The caller
+        must exit promptly afterwards: the replacement is already running.
+        """
+
+        executable = running_executable()
+        if executable is None:
+            raise LauncherError(
+                "this launcher is running from source, so there is no executable "
+                "to replace"
+            )
+        if not can_replace(executable):
+            raise LauncherError(
+                f"cannot write to {executable.parent}, so the launcher cannot update "
+                "itself. Move it somewhere you own, such as your user folder."
+            )
+
+        base_dir = manifest_source_base_dir(
+            self.settings.resolved_launcher_manifest_url()
+        )
+        try:
+            staged = download_replacement(
+                manifest,
+                executable,
+                base_dir=base_dir,
+                opener=self._opener,
+                progress=progress,
+            )
+            retired = swap_in_place(staged, executable)
+            relaunch(executable)
+        except (SelfUpdateError, UpdateError) as exc:
+            staged_path(executable).unlink(missing_ok=True)
+            raise LauncherError(str(exc)) from exc
+        return retired
+
+    @staticmethod
+    def tidy_previous_launcher() -> bool:
+        """Delete the launcher a previous self-update superseded."""
+
+        executable = running_executable()
+        if executable is None:
+            return False
+        return clean_retired(executable)
+
     # -- presentation helpers -------------------------------------------
 
     def patch_notes(self, manifest: dict[str, Any], *, expanded: bool = True) -> str:
@@ -203,4 +287,4 @@ class Launcher:
         return render_patch_notes(manifest, running_sha, expanded=expanded)
 
 
-__all__ = ["Launcher", "LauncherError", "LauncherStatus"]
+__all__ = ["LAUNCHER_VERSION", "Launcher", "LauncherError", "LauncherStatus"]

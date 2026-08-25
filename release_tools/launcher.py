@@ -13,6 +13,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+from . import __version__
 from .launcher_core import Launcher, LauncherError
 from .server import ServerEndpointConfigurationError
 from .settings import (
@@ -28,6 +29,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="somethingbound-launcher",
         description="Update and start the SomethingBound client.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"SomethingBound launcher {__version__}",
     )
     parser.add_argument(
         "--data-dir",
@@ -47,6 +53,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     commands.add_parser("play", help="start the installed client and exit")
     commands.add_parser("rollback", help="return to the retained previous build")
+    commands.add_parser(
+        "self-update", help="replace this launcher with the published one"
+    )
 
     config = commands.add_parser("config", help="show or change launcher settings")
     config.add_argument("--server", help="server endpoint the client connects to")
@@ -61,9 +70,27 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _run_self_update(launcher: Launcher) -> int:
+    manifest = launcher.fetch_launcher_manifest()
+    plan = launcher.launcher_plan(manifest)
+    if not plan.available:
+        print(
+            f"Launcher {plan.installed_version} is current "
+            f"(channel has {plan.channel_version}): {plan.reason}"
+        )
+        return 0
+
+    print(f"Updating the launcher from {plan.installed_version} to {plan.channel_version}")
+    retired = launcher.update_launcher(manifest)
+    print(f"The updated launcher has been started. The previous one is at {retired}")
+    print("and is deleted the next time the launcher runs.")
+    return 0
+
+
 def _print_status(launcher: Launcher) -> int:
     status = launcher.status()
     print(status.summary())
+    print(f"Launcher:  {__version__}")
     installed = status.installed
     if installed is not None:
         print(f"Installed: {installed.build.version} ({installed.build.git_sha})")
@@ -159,6 +186,8 @@ def main(argv: list[str] | None = None) -> int:
             return _print_status(launcher)
         if args.command == "update":
             return _run_update(launcher, collapsed=args.collapsed_notes)
+        if args.command == "self-update":
+            return _run_self_update(launcher)
         if args.command == "rollback":
             restored = launcher.rollback()
             print(f"Rolled back to {restored.build.version} ({restored.build.git_sha})")
