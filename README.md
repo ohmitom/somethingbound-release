@@ -57,6 +57,33 @@ discards the player's server choice.
 | `installDir` | Where builds are installed. Blank uses local application data. |
 | `autoUpdate` | Whether the window checks the channel when it opens. |
 
+## The launcher updates itself
+
+The launcher is delivered by hand once, then carries itself forward. It watches
+`channels/launcher.json`, which is separate from the client channel because the
+two version independently: the client ships constantly and the launcher almost
+never.
+
+Windows will not let a running executable be overwritten, but it will let one be
+renamed, so the launcher verifies its replacement, renames itself aside, moves
+the replacement onto its own path, starts it, and exits. The next run deletes
+the retired copy. `release_tools/self_update.py` documents the ordering that
+makes a failure at any point recoverable.
+
+Publish a new launcher with:
+
+```powershell
+./launcher_build/build-launcher.ps1
+python -m release_tools.publish --artifact-file launcher_build/dist/SomethingBoundLauncher.exe   --version <version> --channel launcher --game-repo . --git-sha $(git rev-parse HEAD) --publish
+```
+
+The version comes from `release_tools/__init__.py`, the build stamps it beside
+the executable, and publishing refuses a mismatch. A launcher whose version
+disagrees with its channel would see an update every time it started, forever.
+
+A launcher in a directory the player cannot write to, such as Program Files,
+reports that instead of failing part way through.
+
 ## Package the executable
 
 ```powershell
