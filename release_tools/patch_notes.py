@@ -23,7 +23,7 @@ def render_patch_notes(
 
     notes = manifest["notes"]
     lines = [
-        f"Patch notes — {manifest['channel']} {manifest['version']}",
+        f"Patch notes - {manifest['channel']} {manifest['version']}",
         f"Running Git SHA: {running_git_sha}",
         f"Summary: {notes['summary']}",
     ]

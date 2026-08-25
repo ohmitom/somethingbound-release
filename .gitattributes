@@ -1,0 +1,6 @@
+# The release tooling is text and stays LF in the working tree on every platform.
+* text=auto eol=lf
+
+# Fixture artifacts are hashed byte-for-byte by the manifest contract. Any
+# end-of-line translation changes their size and SHA-256 and fails the suite.
+fixtures/artifacts/** -text
