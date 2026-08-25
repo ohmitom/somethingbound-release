@@ -6,7 +6,7 @@ complete local-development example.
 
 ## Identity contract
 
-The top-level fields are intentionally exact—no `release`, `releaseNotes`,
+The top-level fields are intentionally exact - no `release`, `releaseNotes`,
 `sizeBytes`, or alternate aliases are used:
 
 ```json
@@ -44,10 +44,15 @@ first seven characters of each full commit SHA and retains the exact SHA in the
 manifest. Artifact names are filenames, not paths; this prevents a manifest
 from escaping the install directory.
 
-`url` may be a plain path, a `file:` URL, or HTTP(S). The foundation supports
-local files and local HTTP servers for development. It does not publish or
-fetch from a production host in this task. Credentials in URLs and remote-host
-UNC file URLs are rejected.
+`url` may be a plain path, a `file:` URL, or HTTP(S). Published channels use
+HTTPS release-asset URLs; local paths and `http://localhost` serve development
+channels. Credentials in URLs and remote-host UNC file URLs are rejected.
+
+The manifest itself is fetched from the same set of sources, with one extra
+rule: a manifest URL must be HTTPS unless its host is localhost. A manifest
+decides which bytes a player executes, so it is never fetched over plain HTTP
+from a remote host. Manifests are also size-capped while being read, so a wrong
+URL cannot stream without bound into launcher memory.
 
 The server `/version` identity uses the exact names `version`, `gitSha`, and,
 where that contract applies, `protocolVersion`. The launcher channel manifest

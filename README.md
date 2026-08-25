@@ -1,83 +1,145 @@
 # SomethingBound release
 
-This repository contains the dependency-free foundation for a Windows launcher
-release channel. It validates local channel metadata, verifies an artifact, and
-installs it with an atomic swap. It does **not** host releases, schedule
-updates, sign binaries, connect to Railway, or integrate with the game.
+This repository is the SomethingBound launcher and the release channel it
+watches. It packages a Windows client build, publishes it as a GitHub release,
+and installs it on a player's machine with verification, an atomic activation,
+and a retained previous build.
 
-## Release-channel contract
+It has no third-party runtime dependencies. The launcher is CPython and Tk.
 
-The public contract is documented in
-[`docs/release-channel-manifest.md`](docs/release-channel-manifest.md) and
-machine-readable at [`schema/release-manifest.schema.json`](schema/release-manifest.schema.json).
-The top-level identity fields are exactly:
+## The two halves
 
-```text
-channel, version, gitSha, releasedAt, notes, artifacts
-```
+**Publishing** turns a client build into a release. `release_tools/publish.py`
+packages the build, derives patch notes from the game repository's history since
+the last published release, writes a channel manifest, uploads the release, and
+updates the channel pointer in `channels/`.
 
-`notes` contains a human `summary` and exact full-SHA commit entries. Each
-artifact contains `name`, `url`, `sha256`, and `size`. `url` can be a local path,
-a `file:` URL, or HTTP(S); only local files and local HTTP are intended for this
-foundation. The server `/version` naming remains exact: `version`, `gitSha`, and
-`protocolVersion` where that server contract applies—never aliases such as
-`release` or `protocol`.
+**Installing** is what a player runs. `release_tools/launcher.py` opens a window
+that reads the channel pointer, compares it with what is installed, downloads
+and verifies the artifact, activates it, and starts the client against the
+selected server.
 
-`fixtures/manifest.local-dev.json` and
-`fixtures/artifacts/launcher-local-dev.txt` are a complete local channel.
+The manifest in `channels/` is the only thing joining them, and its contract is
+in [`docs/release-channel-manifest.md`](docs/release-channel-manifest.md) and
+[`schema/release-manifest.schema.json`](schema/release-manifest.schema.json).
 
-## Run from a clean checkout
-
-The tools use only the Python standard library (Python 3.11+ recommended):
+## Run the launcher
 
 ```sh
-python3 -m unittest discover --start-directory tests --verbose
-python3 -m release_tools.validate_manifest \
-  fixtures/manifest.local-dev.json \
-  --artifact launcher-local-dev.txt=fixtures/artifacts/launcher-local-dev.txt
+python -m release_tools.launcher
 ```
 
-Run the launcher foundation end to end. The command seeds an old installed
-identity, resolves the relative local artifact path from the manifest directory,
-verifies its size and SHA-256, atomically installs it, and prints the patch
-notes with the running Git SHA:
+That opens the window. The same operations are available without one, which is
+how a playtest problem gets diagnosed over a terminal:
 
 ```sh
-install_dir="$(mktemp -d)"
-python3 -m release_tools.launcher \
-  --manifest fixtures/manifest.local-dev.json \
-  --install-dir "$install_dir" \
-  --installed-version 1.0.0 \
-  --installed-git-sha 0000000000000000000000000000000000000000
-rm -rf "$install_dir"
+python -m release_tools.launcher status
+python -m release_tools.launcher update
+python -m release_tools.launcher play
+python -m release_tools.launcher rollback
+python -m release_tools.launcher config --server https://your-server.example
 ```
 
-For a local HTTP source, serve the artifact directory with
-`python3 -m http.server` and use an `http://localhost:<port>/...` URL in a
-copy of the development manifest. No production host is required.
+`--data-dir` points every command at a different `launcher.json`, which is how
+to try a channel without touching the real install.
 
-## Update safety
+### Settings
 
-`release_tools.channel_manifest` parses JSON, validates the channel schema,
-rejects malformed or regressive manifests, and rejects unsafe artifact names and
-URLs. `release_tools.update_engine` then:
+Settings live in `launcher.json` under `%LOCALAPPDATA%\SomethingBound`, beside
+the install rather than inside it, so replacing or rolling back a build never
+discards the player's server choice.
 
-1. compares installed `version` and `gitSha` to the manifest;
-2. downloads to a temporary file;
-3. verifies the declared byte count and lowercase SHA-256;
-4. swaps the verified payload into `current` with `os.replace`;
-5. retains the prior payload as `previous` and prior state as `previous.json`.
+| Setting | Meaning |
+|---|---|
+| `serverEndpoint` | The server the client connects to. HTTPS, or HTTP for localhost only. |
+| `channel` | Which release channel to follow. |
+| `manifestUrl` | Explicit channel source. Blank uses the published channel for `channel`. |
+| `installDir` | Where builds are installed. Blank uses local application data. |
+| `autoUpdate` | Whether the window checks the channel when it opens. |
 
-A simulated failure after the payload swap restores the old payload. Signed
-manifests, code signing, automatic scheduling, hosted serving, and product
-process hand-off are intentionally later work.
+## Package the executable
 
-## Existing release contract tools
+```powershell
+./launcher_build/build-launcher.ps1
+```
 
-The repository also retains the earlier coordinated release/server compatibility
-fixtures and checks in `release_tools/compatibility.py`, `release_tools/server.py`,
-the `dispatch-railway.yml`/`publish-release.yml` workflows, and the legacy fixture
-manifests. That coordinated path is superseded by the channel-manifest contract
-above and is kept only pending the full release-loop task; it is not documented
-further here, and no compatibility layer or second schema should be added on top
-of it. It remains covered by the full test command.
+This runs the tests, creates an isolated build environment under
+`launcher_build/.venv`, and produces `launcher_build/dist/SomethingBoundLauncher.exe`.
+PyInstaller is a build-time tool only and is never imported by the launcher.
+
+## Publish a build
+
+From the game repository, one command builds the client and promotes it:
+
+```powershell
+./tools/publish-playtest.ps1 -Version 0.3.0
+```
+
+That is a dry run. It builds, packages, and reports exactly what would be
+released without uploading anything. Add `-Publish` to create the release:
+
+```powershell
+$env:SOMETHINGBOUND_RELEASE_TOKEN = '<token with contents:write on this repo>'
+./tools/publish-playtest.ps1 -Version 0.3.0 -Publish
+```
+
+Publishing uploads the artifact and manifest to a GitHub release and rewrites
+`channels/<channel>.json`. **The promotion is not finished until that pointer is
+committed and pushed**, because the pointer is what installed launchers read.
+Keeping that step manual means an upload can be checked before every player
+sees it.
+
+## How an install cannot corrupt itself
+
+Every build lives in its own immutable directory and the active build is a
+pointer file, so choosing which build runs is one atomic `os.replace` of a small
+JSON file. A directory cannot be swapped atomically on Windows once the
+destination exists, which is why the pointer exists at all.
+
+1. The manifest is validated before anything is downloaded, and a manifest
+   below the installed version is refused.
+2. The artifact is downloaded to a temporary file and checked against the
+   declared byte count and SHA-256.
+3. It is unpacked into staging. Archive entries with absolute paths, parent
+   traversal, or symbolic links are refused rather than sanitised.
+4. The staged payload is moved into its versioned directory.
+5. The pointer is replaced. Only now does the new build become active.
+
+A failure at any step leaves the previous build active and its payload intact.
+`rollback` moves the pointer back, and because no payload was deleted, a
+rollback is itself reversible.
+
+These are integrity checks, not a signature system. Code signing and signed
+manifests remain later work.
+
+## Local development without a host
+
+The manifest source may be a local path, so a channel can be exercised entirely
+offline:
+
+```sh
+python -m release_tools.launcher --data-dir /tmp/dev config \
+  --manifest-url "$PWD/fixtures/manifest.local-dev.json"
+```
+
+`fixtures/manifest.local-dev.json` and `fixtures/artifacts/` are a complete
+local channel. `python -m http.server` plus an `http://localhost:<port>/` URL
+covers the HTTP path.
+
+## Tests
+
+```sh
+python -m unittest discover --start-directory tests --verbose
+```
+
+Everything is deterministic and offline: no test reaches the network.
+
+## Earlier coordinated release tooling
+
+`release_tools/compatibility.py`, `release_tools/server.py`,
+`release_tools/deployment.py`, the `dispatch-railway.yml` and
+`publish-release.yml` workflows, and the legacy fixture manifests predate the
+channel contract above. `server.py` is still live - the launcher validates
+endpoints with it - but the coordinated manifest path is superseded and kept
+only pending the server work. Do not add a compatibility layer or a second
+schema on top of it. It stays covered by the full test command.

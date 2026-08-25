@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - ".github/workflows/**"
+      - "channels/**"
       - "fixtures/**"
       - "release_tools/**"
       - "schema/**"
@@ -45,6 +46,18 @@ jobs:
           python3 -m release_tools.validate_manifest \
             fixtures/manifest.local-dev.json \
             --artifact launcher-local-dev.txt=fixtures/artifacts/launcher-local-dev.txt
+
+      - name: Validate every published channel pointer
+        run: |
+          set -euo pipefail
+          # A broken pointer breaks every installed launcher at once, so its
+          # structure is checked here.  The artifact bytes live on a release
+          # and are verified by the launcher at install time, not by this job.
+          shopt -s nullglob
+          for channel in channels/*.json; do
+            echo "checking ${channel}"
+            python3 -m release_tools.validate_manifest "${channel}"
+          done
 
       - name: Run deterministic contract tests
         run: python3 -m unittest discover --start-directory tests --verbose

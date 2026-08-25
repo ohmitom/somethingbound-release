@@ -13,6 +13,24 @@ When updating this file, preserve this bar for all agents and keep entries conci
 
 ## Project map
 
-- The launcher channel contract is authoritative in `docs/release-channel-manifest.md` and `schema/release-manifest.schema.json`; the local end-to-end example is `fixtures/manifest.local-dev.json`.
-- Run the full dependency-free validation with `python3 -m unittest discover --start-directory tests --verbose`; the launcher demo command is documented in `README.md`.
-- Channel loading/update/rendering lives in `release_tools/channel_manifest.py`, `release_tools/update_engine.py`, and `release_tools/patch_notes.py`. `release_tools/manifest.py` also preserves the earlier coordinated manifest contract used by legacy fixtures.
+- The launcher channel contract is authoritative in `docs/release-channel-manifest.md` and `schema/release-manifest.schema.json`. `channels/` holds the live pointers players actually read; `fixtures/manifest.local-dev.json` is the offline example.
+- Run the full dependency-free validation with `python3 -m unittest discover --start-directory tests --verbose`. `README.md` documents every launcher and publish command.
+- Publishing is `release_tools/publish.py`, driven from the game repository by `tools/publish-playtest.ps1`. Installing is `release_tools/launcher_core.py` over `install_tree.py`, `settings.py`, and `game_process.py`, with the window in `gui.py`.
+- Channel parsing and single-file update mechanics stay in `channel_manifest.py`, `update_engine.py`, and `patch_notes.py`. `manifest.py` preserves the earlier coordinated contract used by legacy fixtures.
+
+## The three repositories
+
+- `ohmitom/SomethingBound` is the Unity client. It builds releases through `tools/publish-playtest.ps1`.
+- `ohmitom/somethingbound-release` is this repository: the launcher and the channel players read.
+- `ohmitom/somethingbound-server` is the private server, deployed to Railway at
+  `https://somethingbound-server-production.up.railway.app`. That URL is the launcher's default
+  server endpoint in `release_tools/settings.py`. `dispatch-railway.yml` reaches the server
+  repository through the `SOMETHINGBOUND_SERVER_REPOSITORY` Actions variable, which is why the
+  name appears nowhere in that workflow.
+
+## Sharp edges
+
+- Builds install into `builds/<version>+<short sha>/` with the active one named by `current.json`. Activation is a pointer replace, never a directory rename, because a directory cannot be swapped atomically on Windows once the destination exists. Anything that changes activation must keep that property.
+- The fixture artifacts in `fixtures/artifacts/` are hashed byte for byte. `.gitattributes` marks them `-text`; without it a Windows checkout rewrites their line endings and six tests fail on a clean clone.
+- Windows PowerShell turns any stderr line from a native executable into a terminating error under `ErrorActionPreference = 'Stop'`. PyInstaller and unittest both report progress on stderr, so the `.ps1` scripts here check `$LASTEXITCODE` instead. See `Invoke-Native` in `launcher_build/build-launcher.ps1`.
+- Publishing uploads the release but deliberately does not commit the channel pointer. Until that commit is pushed, no launcher sees the release.

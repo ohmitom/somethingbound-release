@@ -10,3 +10,8 @@ venv/
 .env
 .env.*
 !.env.example
+
+# Launcher packaging and release staging outputs
+launcher_build/dist/
+launcher_build/work/
+dist/

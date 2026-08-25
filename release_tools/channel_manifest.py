@@ -11,9 +11,11 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import urllib.error
+import urllib.request
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import unquote, urlsplit
 
 from .manifest import _semver_key, compare_versions
@@ -26,6 +28,10 @@ _TIMESTAMP_RE = re.compile(
     r"[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?Z$"
 )
 _CHANNEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+# A channel manifest describes a release; it is never large.  The cap stops a
+# wrong or hostile URL from streaming without bound into launcher memory.
+MANIFEST_SIZE_LIMIT = 4 * 1024 * 1024
 _WINDOWS_DRIVE_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
 _WINDOWS_DRIVE_FILE_PATH_RE = re.compile(r"^/[A-Za-z]:[\\/]")
 
@@ -264,25 +270,105 @@ def validate_channel_manifest(
     return errors
 
 
+def manifest_source_base_dir(source: str | Path) -> Path | None:
+    """Return the directory that relative artifact URLs resolve against.
+
+    A remote manifest has no local base directory, so its artifacts must
+    carry absolute URLs.
+    """
+
+    if isinstance(source, Path):
+        return source.resolve().parent
+    scheme = urlsplit(source).scheme
+    if scheme in ("http", "https") and not _WINDOWS_DRIVE_PATH_RE.match(source):
+        return None
+    return Path(source).resolve().parent
+
+
+def _check_manifest_url(url: str) -> None:
+    """Reject a manifest URL that is not a safe transport for a release."""
+
+    if not url or any(character.isspace() for character in url):
+        raise ChannelManifestValidationError(
+            [f"{url!r}: manifest URL must not contain whitespace"]
+        )
+    parsed = urlsplit(url)
+    if parsed.username is not None or parsed.password is not None:
+        raise ChannelManifestValidationError(
+            [f"{url}: manifest URL must not contain credentials"]
+        )
+    if not parsed.netloc or parsed.hostname is None:
+        raise ChannelManifestValidationError([f"{url}: manifest URL has no host"])
+    if parsed.scheme == "https":
+        return
+    if parsed.scheme == "http" and parsed.hostname.rstrip(".").lower() in _LOCAL_HOSTS:
+        # Local HTTP serves a development channel from python -m http.server.
+        return
+    raise ChannelManifestValidationError(
+        [f"{url}: manifest URL must use HTTPS (HTTP is permitted only for localhost)"]
+    )
+
+
+def read_channel_manifest_source(
+    source: str | Path,
+    *,
+    timeout: float = 15.0,
+    opener: Callable[..., Any] | None = None,
+) -> str:
+    """Return the raw JSON text of a local or HTTP(S) channel manifest."""
+
+    if not isinstance(source, Path):
+        scheme = urlsplit(source).scheme
+        if scheme in ("http", "https") and not _WINDOWS_DRIVE_PATH_RE.match(source):
+            _check_manifest_url(source)
+            request_opener = opener or urllib.request.urlopen
+            try:
+                with request_opener(source, timeout=timeout) as stream:
+                    raw = stream.read(MANIFEST_SIZE_LIMIT + 1)
+            except (OSError, ValueError, urllib.error.URLError) as exc:
+                raise ChannelManifestValidationError(
+                    [f"{source}: cannot fetch manifest ({exc})"]
+                ) from exc
+            if len(raw) > MANIFEST_SIZE_LIMIT:
+                raise ChannelManifestValidationError(
+                    [f"{source}: manifest is larger than {MANIFEST_SIZE_LIMIT} bytes"]
+                )
+            try:
+                return raw.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise ChannelManifestValidationError(
+                    [f"{source}: manifest is not valid UTF-8 ({exc})"]
+                ) from exc
+
+    manifest_path = Path(source)
+    try:
+        return manifest_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ChannelManifestValidationError(
+            [f"{manifest_path}: cannot read manifest ({exc})"]
+        ) from exc
+    except UnicodeDecodeError as exc:
+        raise ChannelManifestValidationError(
+            [f"{manifest_path}: manifest is not valid UTF-8 ({exc})"]
+        ) from exc
+
+
 def load_channel_manifest(
     path: str | Path,
     *,
     installed_version: str | None = None,
     current_version: str | None = None,
+    timeout: float = 15.0,
+    opener: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
-    """Parse and validate a channel manifest from a JSON file."""
+    """Parse and validate a channel manifest from a local path or HTTPS URL."""
 
-    manifest_path = Path(path)
+    raw = read_channel_manifest_source(path, timeout=timeout, opener=opener)
     try:
-        with manifest_path.open("r", encoding="utf-8") as handle:
-            manifest = json.load(handle)
-    except OSError as exc:
-        raise ChannelManifestValidationError(
-            [f"{manifest_path}: cannot read manifest ({exc})"]
-        ) from exc
+        manifest = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise ChannelManifestValidationError(
-            [f"{manifest_path}: invalid JSON at line {exc.lineno}, column {exc.colno}"]
+            [f"{path}: invalid JSON at line {exc.lineno}, column {exc.colno}"]
         ) from exc
 
     errors = validate_channel_manifest(
@@ -362,10 +448,13 @@ def artifact_url_path(url: str) -> Path | None:
 
 
 __all__ = [
+    "MANIFEST_SIZE_LIMIT",
     "ChannelManifestValidationError",
     "artifact_url_path",
     "find_artifact",
     "load_channel_manifest",
+    "manifest_source_base_dir",
+    "read_channel_manifest_source",
     "validate_channel_manifest",
     "verify_channel_artifact",
 ]
