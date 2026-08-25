@@ -298,6 +298,28 @@ def _api(
     return json.loads(payload) if payload else {}
 
 
+def release_payload(
+    release: Release, body: str, *, draft: bool = False
+) -> dict[str, Any]:
+    """Build the GitHub release request for one publication.
+
+    ``target_commitish`` is deliberately absent. The release is created in the
+    release repository, but ``release.git_sha`` names a commit in the *client*
+    repository, and GitHub rejects a target it cannot resolve, which also stops
+    it creating the tag. The client commit is the build's identity, carried by
+    the manifest and stated in the body; the tag belongs to the release
+    repository's own default branch.
+    """
+
+    return {
+        "tag_name": release.tag,
+        "name": f"SomethingBound {release.version}",
+        "body": body,
+        "draft": draft,
+        "prerelease": "-" in release.version,
+    }
+
+
 def create_github_release(
     repository: str,
     release: Release,
@@ -309,16 +331,7 @@ def create_github_release(
 ) -> dict[str, Any]:
     """Create the release and upload the client artifact and manifest."""
 
-    payload = json.dumps(
-        {
-            "tag_name": release.tag,
-            "target_commitish": release.git_sha,
-            "name": f"SomethingBound {release.version}",
-            "body": body,
-            "draft": draft,
-            "prerelease": "-" in release.version,
-        }
-    ).encode("utf-8")
+    payload = json.dumps(release_payload(release, body, draft=draft)).encode("utf-8")
     created = _api("POST", f"{GITHUB_API}/repos/{repository}/releases", token, body=payload)
 
     upload_base = f"{GITHUB_UPLOADS}/repos/{repository}/releases/{created['id']}/assets"
@@ -492,7 +505,7 @@ def main(argv: list[str] | None = None) -> int:
         token = find_token()
         release = Release(args.channel, args.version, git_sha, tag, artifact, manifest)
         body = "\n".join(
-            [summary, ""]
+            [summary, "", f"Client build: `{git_sha}`", ""]
             + [
                 f"- {commit['sha'][:7]} {commit['category']}"
                 + (f"({commit['scope']})" if commit["scope"] else "")

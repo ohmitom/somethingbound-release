@@ -12,6 +12,8 @@ from pathlib import Path
 from release_tools.channel_manifest import validate_channel_manifest
 from release_tools.install_tree import TreeInstaller
 from release_tools.publish import (
+    Release,
+    release_payload,
     INITIAL_RELEASE_COMMIT_LIMIT,
     PublishError,
     anchor_is_reachable,
@@ -265,6 +267,34 @@ class PackagingTests(unittest.TestCase):
                 summary="A release.",
                 commits=[],
             )
+
+
+class ReleasePayloadTests(unittest.TestCase):
+    def _release(self, version: str = "0.2.0") -> Release:
+        return Release(
+            channel="playtest",
+            version=version,
+            git_sha=SHA,
+            tag=f"v{version}",
+            artifact=Path("client.zip"),
+            manifest={},
+        )
+
+    def test_the_client_commit_is_never_sent_as_the_release_target(self) -> None:
+        """GitHub rejects a commitish it cannot resolve, and the client commit
+        lives in a different repository from the release."""
+
+        payload = release_payload(self._release(), "notes")
+
+        self.assertNotIn("target_commitish", payload)
+        self.assertEqual(payload["tag_name"], "v0.2.0")
+        self.assertEqual(payload["name"], "SomethingBound 0.2.0")
+
+    def test_a_prerelease_version_is_marked_as_one(self) -> None:
+        self.assertFalse(release_payload(self._release("0.2.0"), "")["prerelease"])
+        self.assertTrue(
+            release_payload(self._release("0.2.0-playtest.1"), "")["prerelease"]
+        )
 
 
 class TokenTests(unittest.TestCase):
