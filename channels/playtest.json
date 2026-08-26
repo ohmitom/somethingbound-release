@@ -1,85 +1,15 @@
 {
   "channel": "playtest",
-  "version": "0.2.0",
-  "gitSha": "84e754917524eabef9b57c6eedea97630f1c55a1",
-  "releasedAt": "2026-08-25T17:24:30Z",
+  "version": "0.3.0",
+  "gitSha": "2df9524e93ed2a841f363c5a1a4f503156157f07",
+  "releasedAt": "2026-08-26T08:33:57Z",
   "notes": {
-    "summary": "First playtest build: the outdoor gate and arrival, character creation, and the legible corner HUD.",
+    "summary": "The client now signs in against the authoritative SomethingBound server.",
     "commits": [
       {
-        "sha": "84e754917524eabef9b57c6eedea97630f1c55a1",
-        "subject": "Record the 0.2.0 player build settings",
+        "sha": "2df9524e93ed2a841f363c5a1a4f503156157f07",
+        "subject": "Merge the server-backed client session",
         "category": "change",
-        "scope": null,
-        "pr": null
-      },
-      {
-        "sha": "981e983e120ceeab014a5d1cdb5498b58da1e2dc",
-        "subject": "Quote the Unity arguments so a project path with spaces survives",
-        "category": "change",
-        "scope": null,
-        "pr": null
-      },
-      {
-        "sha": "bdd16c88b4bc6f5e0794931eb2fc15621b2cada8",
-        "subject": "Capture the release identity before the build runs",
-        "category": "change",
-        "scope": null,
-        "pr": null
-      },
-      {
-        "sha": "71a5cae691bf0e3ef39580b5561b554bcfeb895c",
-        "subject": "Merge the launcher release pipeline and in-flight client work",
-        "category": "change",
-        "scope": null,
-        "pr": null
-      },
-      {
-        "sha": "de2c28f6abd713f57fa5876f5de7a9694803631d",
-        "subject": "Build the first outdoor gate and arrival",
-        "category": "change",
-        "scope": null,
-        "pr": null
-      },
-      {
-        "sha": "23ce84d137f0dfd8f8546049d3c12de661bc7244",
-        "subject": "Improve character creation visual hierarchy",
-        "category": "change",
-        "scope": null,
-        "pr": null
-      },
-      {
-        "sha": "2cf3115a9757b65ab68bf13b35c01aa85c7cb9a8",
-        "subject": "Polish the first-frame login screen",
-        "category": "change",
-        "scope": null,
-        "pr": null
-      },
-      {
-        "sha": "68a70123eab3251f2b61b39c8ce1955d4915291f",
-        "subject": "Add character creation after login",
-        "category": "change",
-        "scope": null,
-        "pr": null
-      },
-      {
-        "sha": "18ebc22e0671fc0c6767722bda41953f8ee17b6a",
-        "subject": "Add toolbar input test metadata",
-        "category": "change",
-        "scope": null,
-        "pr": null
-      },
-      {
-        "sha": "f03ee45d9b7bac3feac799a20ea1d1a6dbd96d32",
-        "subject": "complete Phase A visual gate",
-        "category": "fix",
-        "scope": null,
-        "pr": null
-      },
-      {
-        "sha": "66140de4c24ad6477b906cda6d61f64bba5ecb40",
-        "subject": "include capital shaders in player builds",
-        "category": "fix",
         "scope": null,
         "pr": null
       }
@@ -87,10 +17,10 @@
   },
   "artifacts": [
     {
-      "name": "somethingbound-client-0.2.0.zip",
-      "url": "https://github.com/ohmitom/somethingbound-release/releases/download/v0.2.0/somethingbound-client-0.2.0.zip",
-      "sha256": "e4ba040ae196683f2c46bb3c58a6d5eda470f92397ccc179ec699247d9b34579",
-      "size": 52225173
+      "name": "somethingbound-client-0.3.0.zip",
+      "url": "https://github.com/ohmitom/somethingbound-release/releases/download/v0.3.0/somethingbound-client-0.3.0.zip",
+      "sha256": "d5f5bb33b5f494a2b5f3cfa65f086fe773f8e630ee47525b0e772f8fe6c0a6e7",
+      "size": 52228909
     }
   ]
 }
